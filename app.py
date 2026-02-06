@@ -158,7 +158,7 @@ with tab2:
                     # Prepare features and targets
                     fe = FeatureEngineering()
                     features = fe.select_features(data_with_features)
-                    features = features.fillna(method='ffill').fillna(method='bfill')
+                    features = features.ffill().bfill()
                     
                     task = 'regression' if 'Regression' in task_type else 'classification'
                     

@@ -184,7 +184,7 @@ class ModelTrainer:
     
     def load_model(self, filepath):
         """Load model and scaler."""
-        checkpoint = torch.load(filepath, map_location=self.device)
+        checkpoint = torch.load(filepath, map_location=self.device, weights_only=False)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.scaler = checkpoint['scaler']
         self.task = checkpoint['task']

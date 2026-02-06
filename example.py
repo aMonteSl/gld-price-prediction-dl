@@ -24,7 +24,7 @@ def main():
     fe = FeatureEngineering()
     data_with_features = fe.add_technical_indicators(data)
     features = fe.select_features(data_with_features)
-    features = features.fillna(method='ffill').fillna(method='bfill')
+    features = features.ffill().bfill()
     print(f"Created {len(features.columns)} features")
     
     # 3. Prepare targets for different horizons
