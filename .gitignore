@@ -31,8 +31,14 @@ ENV/
 *.swo
 *~
 
+# Trained models and data caches
 models/
 data/
 *.pth
 *.pkl
 .streamlit/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
