@@ -130,20 +130,29 @@ def _sidebar() -> None:
 
         # ── Training ─────────────────────────────────────────────────
         st.subheader(t["sidebar_training_settings"])
-        st.slider(t["sidebar_seq_length"], 10, 60, 20, key="seq_length")
+        
+        # Apply suggested values if they exist (from diagnostics)
+        seq_length_val = st.session_state.pop("_sugg_seq_length", 20)
+        hidden_size_val = st.session_state.pop("_sugg_hidden_size", 64)
+        num_layers_val = st.session_state.pop("_sugg_num_layers", 2)
+        epochs_val = st.session_state.pop("_sugg_epochs", 50)
+        batch_size_val = st.session_state.pop("_sugg_batch_size", 32)
+        learning_rate_val = st.session_state.pop("_sugg_learning_rate", 0.001)
+        
+        st.slider(t["sidebar_seq_length"], 10, 60, seq_length_val, key="seq_length")
         st.select_slider(
             t["sidebar_hidden_size"], _HIDDEN_SIZE_OPTIONS,
-            value=64, key="hidden_size",
+            value=hidden_size_val, key="hidden_size",
         )
-        st.slider(t["sidebar_num_layers"], 1, 4, 2, key="num_layers")
-        st.slider(t["sidebar_epochs"], 10, 200, 50, key="epochs")
+        st.slider(t["sidebar_num_layers"], 1, 4, num_layers_val, key="num_layers")
+        st.slider(t["sidebar_epochs"], 10, 200, epochs_val, key="epochs")
         st.select_slider(
             t["sidebar_batch_size"], _BATCH_SIZE_OPTIONS,
-            value=32, key="batch_size",
+            value=batch_size_val, key="batch_size",
         )
         st.select_slider(
             t["sidebar_learning_rate"], _LR_OPTIONS,
-            value=0.001, key="learning_rate",
+            value=learning_rate_val, key="learning_rate",
         )
 
         # ── About ────────────────────────────────────────────────────
@@ -524,53 +533,56 @@ def _show_diagnostics() -> None:
 
 
 def _apply_suggestions(verdict: str, best_epoch: int) -> None:
-    """Update sidebar config controls based on diagnostics verdict.
+    """Store suggested config values for sidebar widgets.
 
-    Only produces values within the allowed slider/select-slider ranges so
-    that Streamlit widgets stay consistent after ``st.rerun()``.
+    Stores suggestions in temporary keys (_sugg_*) that the sidebar will
+    consume on next rerun. This avoids modifying widget keys after widgets
+    have been instantiated.
     """
     ss = st.session_state
 
     if verdict == "overfitting":
         # Reduce epochs to best_epoch + small buffer
-        ss["epochs"] = min(max(best_epoch + 5, 10), 200)
+        ss["_sugg_epochs"] = min(max(best_epoch + 5, 10), 200)
         # Step hidden_size down
-        _step_select(ss, "hidden_size", _HIDDEN_SIZE_OPTIONS, -1)
+        current_hs = ss.get("hidden_size", 64)
+        ss["_sugg_hidden_size"] = _step_value(current_hs, _HIDDEN_SIZE_OPTIONS, -1)
         # Reduce layers
         nl = ss.get("num_layers", 2)
         if nl > 1:
-            ss["num_layers"] = nl - 1
+            ss["_sugg_num_layers"] = nl - 1
 
     elif verdict == "underfitting":
         # More epochs
-        ss["epochs"] = min(ss.get("epochs", 50) + 50, 200)
+        ss["_sugg_epochs"] = min(ss.get("epochs", 50) + 50, 200)
         # Step hidden_size up
-        _step_select(ss, "hidden_size", _HIDDEN_SIZE_OPTIONS, +1)
+        current_hs = ss.get("hidden_size", 64)
+        ss["_sugg_hidden_size"] = _step_value(current_hs, _HIDDEN_SIZE_OPTIONS, +1)
         # More layers
         nl = ss.get("num_layers", 2)
         if nl < 4:
-            ss["num_layers"] = nl + 1
+            ss["_sugg_num_layers"] = nl + 1
         # Step LR up
-        _step_select(ss, "learning_rate", _LR_OPTIONS, +1)
+        current_lr = ss.get("learning_rate", 0.001)
+        ss["_sugg_learning_rate"] = _step_value(current_lr, _LR_OPTIONS, +1)
 
     elif verdict == "noisy":
         # Step LR down
-        _step_select(ss, "learning_rate", _LR_OPTIONS, -1)
+        current_lr = ss.get("learning_rate", 0.001)
+        ss["_sugg_learning_rate"] = _step_value(current_lr, _LR_OPTIONS, -1)
         # Step batch_size up
-        _step_select(ss, "batch_size", _BATCH_SIZE_OPTIONS, +1)
+        current_bs = ss.get("batch_size", 32)
+        ss["_sugg_batch_size"] = _step_value(current_bs, _BATCH_SIZE_OPTIONS, +1)
         # Increase sequence length
         sl = ss.get("seq_length", 20)
-        ss["seq_length"] = min(sl + 10, 60)
+        ss["_sugg_seq_length"] = min(sl + 10, 60)
 
 
-def _step_select(
-    ss: Any,
-    key: str,
-    options: list,
-    direction: int,
-) -> None:
-    """Step a select-slider value up (+1) or down (-1) within *options*."""
-    current = ss.get(key, options[len(options) // 2])
+def _step_value(current: float, options: list, direction: int) -> float:
+    """Step a select-slider value up (+1) or down (-1) within options.
+    
+    Returns the new value after stepping.
+    """
     try:
         idx = options.index(current)
     except ValueError:
@@ -579,7 +591,7 @@ def _step_select(
             range(len(options)), key=lambda i: abs(options[i] - current),
         )
     new_idx = max(0, min(len(options) - 1, idx + direction))
-    ss[key] = options[new_idx]
+    return options[new_idx]
 
 
 def _show_registry_deletion() -> None:
