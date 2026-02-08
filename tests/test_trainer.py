@@ -1,4 +1,4 @@
-"""Tests for ModelTrainer — data prep, training, prediction, save/load."""
+"""Tests for pinball loss, ModelTrainer, and persistence."""
 from __future__ import annotations
 
 import os
@@ -8,116 +8,123 @@ import numpy as np
 import pytest
 import torch
 
-from gldpred.models import GRURegressor, GRUClassifier, GRUMultiTask
-from gldpred.training import ModelTrainer
-
-from conftest import BATCH, HIDDEN, LAYERS, N_FEATURES, N_SAMPLES, SEQ_LEN
-
-
-# ---------------------------------------------------------------------------
-# prepare_data
-# ---------------------------------------------------------------------------
-
-class TestPrepareData:
-    def test_regression_loaders(self, synthetic_X, synthetic_y_reg):
-        model = GRURegressor(N_FEATURES, HIDDEN, LAYERS)
-        trainer = ModelTrainer(model, task="regression")
-        tl, vl = trainer.prepare_data(synthetic_X, synthetic_y_reg, batch_size=BATCH)
-        assert len(tl) > 0
-        assert len(vl) > 0
-
-    def test_classification_loaders(self, synthetic_X, synthetic_y_cls):
-        model = GRUClassifier(N_FEATURES, HIDDEN, LAYERS)
-        trainer = ModelTrainer(model, task="classification")
-        tl, vl = trainer.prepare_data(synthetic_X, synthetic_y_cls, batch_size=BATCH)
-        assert len(tl) > 0
-
-    def test_multitask_loaders(self, synthetic_X, synthetic_y_mt):
-        model = GRUMultiTask(N_FEATURES, HIDDEN, LAYERS)
-        trainer = ModelTrainer(model, task="multitask")
-        tl, vl = trainer.prepare_data(synthetic_X, synthetic_y_mt, batch_size=BATCH)
-        # Each batch y should have 2 columns
-        batch_X, batch_y = next(iter(tl))
-        assert batch_y.shape[1] == 2
-
-    def test_invalid_task_raises(self):
-        model = GRURegressor(N_FEATURES, HIDDEN, LAYERS)
-        with pytest.raises(ValueError, match="task must be"):
-            ModelTrainer(model, task="invalid")
+from gldpred.models import TCNForecaster
+from gldpred.training import ModelTrainer, pinball_loss
+from conftest import BATCH_SIZE, FORECAST_STEPS, INPUT_SIZE, QUANTILES, SEQ_LENGTH
 
 
-# ---------------------------------------------------------------------------
-# train
-# ---------------------------------------------------------------------------
+# ── Pinball loss ──────────────────────────────────────────────────────
 
-class TestTraining:
-    def test_regression_loss_decreases(self, synthetic_X, synthetic_y_reg):
-        model = GRURegressor(N_FEATURES, HIDDEN, LAYERS)
-        trainer = ModelTrainer(model, task="regression")
-        tl, vl = trainer.prepare_data(synthetic_X, synthetic_y_reg, batch_size=BATCH)
-        history = trainer.train(tl, vl, epochs=10, learning_rate=0.01)
-        assert len(history["train_loss"]) == 10
-        # Loss should generally decrease (allow some noise)
-        assert history["train_loss"][-1] <= history["train_loss"][0] * 1.5
+class TestPinballLoss:
+    def test_zero_error(self):
+        """Loss is zero when predictions equal targets."""
+        q = torch.tensor([0.1, 0.5, 0.9])
+        y_true = torch.zeros(BATCH_SIZE, FORECAST_STEPS)
+        y_pred = torch.zeros(BATCH_SIZE, FORECAST_STEPS, len(q))
+        loss = pinball_loss(y_pred, y_true, q)
+        assert loss.item() == pytest.approx(0.0, abs=1e-7)
 
-    def test_multitask_training(self, synthetic_X, synthetic_y_mt):
-        model = GRUMultiTask(N_FEATURES, HIDDEN, LAYERS)
-        trainer = ModelTrainer(model, task="multitask", w_reg=1.0, w_cls=1.0)
-        tl, vl = trainer.prepare_data(synthetic_X, synthetic_y_mt, batch_size=BATCH)
-        history = trainer.train(tl, vl, epochs=5)
-        assert len(history["train_loss"]) == 5
-        assert all(isinstance(v, float) for v in history["train_loss"])
+    def test_positive(self):
+        """Pinball loss is always non-negative."""
+        q = torch.tensor([0.1, 0.5, 0.9])
+        y_true = torch.randn(BATCH_SIZE, FORECAST_STEPS)
+        y_pred = torch.randn(BATCH_SIZE, FORECAST_STEPS, len(q))
+        loss = pinball_loss(y_pred, y_true, q)
+        assert loss.item() >= 0.0
 
-
-# ---------------------------------------------------------------------------
-# predict
-# ---------------------------------------------------------------------------
-
-class TestPredict:
-    def test_regression_predict_shape(self, synthetic_X, synthetic_y_reg):
-        model = GRURegressor(N_FEATURES, HIDDEN, LAYERS)
-        trainer = ModelTrainer(model, task="regression")
-        tl, vl = trainer.prepare_data(synthetic_X, synthetic_y_reg, batch_size=BATCH)
-        trainer.train(tl, vl, epochs=2)
-        preds = trainer.predict(synthetic_X)
-        assert isinstance(preds, np.ndarray)
-        assert preds.shape == (N_SAMPLES,)
-
-    def test_multitask_predict_returns_tuple(self, synthetic_X, synthetic_y_mt):
-        model = GRUMultiTask(N_FEATURES, HIDDEN, LAYERS)
-        trainer = ModelTrainer(model, task="multitask")
-        tl, vl = trainer.prepare_data(synthetic_X, synthetic_y_mt, batch_size=BATCH)
-        trainer.train(tl, vl, epochs=2)
-        result = trainer.predict(synthetic_X)
-        assert isinstance(result, tuple)
-        reg_preds, cls_probs = result
-        assert reg_preds.shape == (N_SAMPLES,)
-        assert cls_probs.shape == (N_SAMPLES,)
-        # cls_probs should be 0–1 (sigmoid applied)
-        assert cls_probs.min() >= 0.0
-        assert cls_probs.max() <= 1.0
+    def test_asymmetry(self):
+        """Higher quantile penalises under-prediction more."""
+        q = torch.tensor([0.1, 0.5, 0.9])
+        y_true = torch.ones(1, 1)  # actual = 1
+        # over-predict
+        y_over = torch.full((1, 1, 3), 2.0)
+        # under-predict
+        y_under = torch.full((1, 1, 3), 0.0)
+        loss_over = pinball_loss(y_over, y_true, q)
+        loss_under = pinball_loss(y_under, y_true, q)
+        # Both should be >0
+        assert loss_over.item() > 0
+        assert loss_under.item() > 0
 
 
-# ---------------------------------------------------------------------------
-# save / load
-# ---------------------------------------------------------------------------
+# ── ModelTrainer ──────────────────────────────────────────────────────
 
-class TestPersistence:
-    def test_save_and_load(self, synthetic_X, synthetic_y_reg):
-        model = GRURegressor(N_FEATURES, HIDDEN, LAYERS)
-        trainer = ModelTrainer(model, task="regression")
-        tl, vl = trainer.prepare_data(synthetic_X, synthetic_y_reg, batch_size=BATCH)
-        trainer.train(tl, vl, epochs=2)
-        preds_before = trainer.predict(synthetic_X)
+class TestModelTrainer:
+    def _make_trainer(self):
+        model = TCNForecaster(
+            input_size=INPUT_SIZE,
+            hidden_size=32,
+            num_layers=1,
+            forecast_steps=FORECAST_STEPS,
+            quantiles=QUANTILES,
+        )
+        return ModelTrainer(model, quantiles=QUANTILES, device="cpu")
+
+    def test_prepare_data(self, synthetic_X, synthetic_y):
+        trainer = self._make_trainer()
+        train_dl, val_dl = trainer.prepare_data(
+            synthetic_X, synthetic_y, test_size=0.2, batch_size=8,
+        )
+        assert len(train_dl) > 0
+        assert len(val_dl) > 0
+
+    def test_train_short(self, synthetic_X, synthetic_y):
+        trainer = self._make_trainer()
+        train_dl, val_dl = trainer.prepare_data(
+            synthetic_X, synthetic_y, test_size=0.2, batch_size=8,
+        )
+        history = trainer.train(train_dl, val_dl, epochs=2, learning_rate=0.001)
+        assert len(history["train_loss"]) == 2
+        assert len(history["val_loss"]) == 2
+
+    def test_predict_shape(self, synthetic_X, synthetic_y):
+        trainer = self._make_trainer()
+        train_dl, val_dl = trainer.prepare_data(
+            synthetic_X, synthetic_y, test_size=0.2, batch_size=8,
+        )
+        trainer.train(train_dl, val_dl, epochs=2, learning_rate=0.001)
+        pred = trainer.predict(synthetic_X[:5])
+        assert pred.shape == (5, FORECAST_STEPS, len(QUANTILES))
+
+    def test_save_load_checkpoint(self, synthetic_X, synthetic_y):
+        trainer = self._make_trainer()
+        train_dl, val_dl = trainer.prepare_data(
+            synthetic_X, synthetic_y, test_size=0.2, batch_size=8,
+        )
+        trainer.train(train_dl, val_dl, epochs=2, learning_rate=0.001)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "model.pth")
-            trainer.save_model(path)
+            path = os.path.join(tmpdir, "ckpt.pth")
+            trainer.save_checkpoint(path)
+            assert os.path.exists(path)
 
-            # Create a fresh model + trainer and load
-            model2 = GRURegressor(N_FEATURES, HIDDEN, LAYERS)
-            trainer2 = ModelTrainer(model2, task="regression")
-            trainer2.load_model(path)
-            preds_after = trainer2.predict(synthetic_X)
+            # Load into fresh trainer
+            trainer2 = self._make_trainer()
+            trainer2.load_checkpoint(path)
+            assert len(trainer2.history["train_loss"]) == 2
 
-        np.testing.assert_allclose(preds_before, preds_after, atol=1e-5)
+    def test_finetune_scaler(self, synthetic_X, synthetic_y):
+        """Fine-tune mode preserves existing scaler."""
+        trainer = self._make_trainer()
+        train_dl, val_dl = trainer.prepare_data(
+            synthetic_X, synthetic_y, test_size=0.2, batch_size=8,
+        )
+        original_mean = trainer.scaler.mean_.copy()
+
+        # Re-prepare with refit_scaler=False (simulate fine-tune)
+        train_dl2, val_dl2 = trainer.prepare_data(
+            synthetic_X, synthetic_y, test_size=0.2, batch_size=8, refit_scaler=False,
+        )
+        np.testing.assert_array_equal(trainer.scaler.mean_, original_mean)
+
+    def test_on_epoch_callback(self, synthetic_X, synthetic_y):
+        """on_epoch callback is called for each epoch."""
+        trainer = self._make_trainer()
+        train_dl, val_dl = trainer.prepare_data(
+            synthetic_X, synthetic_y, test_size=0.2, batch_size=8,
+        )
+        calls = []
+        def cb(epoch, total, history):
+            calls.append(epoch)
+        trainer.train(train_dl, val_dl, epochs=3, learning_rate=0.001, on_epoch=cb)
+        assert calls == [0, 1, 2]

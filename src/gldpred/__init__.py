@@ -1,9 +1,6 @@
-"""
-GLD Price Prediction with Deep Learning.
+"""GLD Price Prediction — Multi-Asset Forecasting with Deep Learning.
 
-A deep learning application for forecasting GLD (Gold ETF) price movements
-using PyTorch GRU/LSTM/TCN architectures with regression, classification,
-and multi-task learning.
+Version 3.0 — multi-step quantile trajectory forecasting with decision support.
 """
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"

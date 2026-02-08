@@ -8,16 +8,25 @@
 
 ## 1. Project Overview
 
-**GLD Price Prediction** is a deep-learning application that downloads
-historical **GLD ETF** (Gold) data, engineers technical features, and trains
-**GRU / LSTM / TCN** models (PyTorch) to predict future price movements. It
-supports **regression** (predicted returns), **classification** (buy /
-no-buy signals), and **multi-task learning** (both simultaneously) at
-1-, 5-, and 20-day horizons, with **automatic training diagnostics**.
+**Multi-Asset Price Prediction** is a deep-learning application that
+downloads historical price data for multiple financial assets, engineers
+technical features, and trains **GRU / LSTM / TCN** models (PyTorch) to
+produce **probabilistic quantile trajectory forecasts**. Supported assets
+are defined in the `SUPPORTED_ASSETS` constant: **GLD** (Gold ETF),
+**SLV** (Silver ETF), **BTC-USD** (Bitcoin), and **PALL** (Palladium ETF).
+
+The system uses a **unified quantile forecasting** approach — there is no
+separate regression, classification, or multi-task split. Every model
+outputs a tensor of shape `(batch, K, Q)` where `K` is the number of
+forecast steps (default 20) and `Q` is the number of quantiles (default
+`(0.1, 0.5, 0.9)`). Training is driven by **pinball (quantile) loss**.
+
+A **decision engine** converts forecast trajectories into actionable
+**BUY / HOLD / AVOID** recommendations with confidence scores.
 
 A **Streamlit** GUI provides interactive data exploration, training,
-prediction visualisation, evaluation, and a built-in tutorial — all fully
-internationalised in **English and Spanish**.
+forecasting, recommendation, evaluation, and a built-in tutorial — all
+fully internationalised in **English and Spanish**.
 
 ---
 
@@ -27,61 +36,76 @@ internationalised in **English and Spanish**.
 gld-price-prediction-dl/
 ├── app.py                        # Thin entrypoint — run `streamlit run app.py`
 ├── requirements.txt              # pip dependencies
+├── pyproject.toml                # Build configuration
 ├── pytest.ini                    # pytest configuration
 ├── README.md                     # User-facing README
 ├── USER_GUIDE.md                 # Comprehensive tutorial / user guide
 ├── AGENTS.md                     # ← You are here
 │
 ├── src/gldpred/                  # Main Python package
-│   ├── __init__.py               # Package root (version, public API) — v2.0.0
-│   ├── config.py                 # DataConfig, ModelConfig, TrainingConfig
+│   ├── __init__.py               # Package root (version, public API) — v3.0.0
+│   │
+│   ├── config/
+│   │   └── __init__.py           # DataConfig, ModelConfig, TrainingConfig,
+│   │                             #   DecisionConfig, AppConfig, SUPPORTED_ASSETS
+│   │
+│   ├── i18n/
+│   │   └── __init__.py           # STRINGS, LANGUAGES (EN / ES)
 │   │
 │   ├── data/
 │   │   ├── __init__.py
-│   │   └── loader.py             # GLDDataLoader (yfinance wrapper)
+│   │   └── loader.py             # AssetDataLoader (yfinance, any supported ticker)
 │   │
 │   ├── features/
 │   │   ├── __init__.py
-│   │   └── engineering.py        # FeatureEngineering (28 technical indicators)
+│   │   └── engineering.py        # FeatureEngineering (30+ features, multi-step seqs)
 │   │
 │   ├── models/
 │   │   ├── __init__.py
-│   │   └── architectures.py      # 9 models: GRU/LSTM/TCN × Reg/Cls/MultiTask
+│   │   └── architectures.py      # GRUForecaster, LSTMForecaster, TCNForecaster
 │   │
 │   ├── training/
 │   │   ├── __init__.py
-│   │   └── trainer.py            # ModelTrainer (reg/cls/multitask, save/load)
+│   │   └── trainer.py            # ModelTrainer, pinball_loss
 │   │
 │   ├── evaluation/
 │   │   ├── __init__.py
-│   │   └── evaluator.py          # Regression, classification & multitask metrics
-│   │
-│   ├── inference/
-│   │   ├── __init__.py
-│   │   └── predictor.py          # Predictor (wraps trainer for signal generation)
+│   │   └── evaluator.py          # ModelEvaluator (trajectory + quantile metrics)
 │   │
 │   ├── diagnostics/
 │   │   ├── __init__.py
 │   │   └── analyzer.py           # DiagnosticsAnalyzer (loss-curve analysis)
 │   │
+│   ├── inference/
+│   │   ├── __init__.py
+│   │   └── predictor.py          # TrajectoryPredictor, TrajectoryForecast
+│   │
+│   ├── registry/
+│   │   ├── __init__.py
+│   │   └── store.py              # ModelRegistry (save / load / list / delete)
+│   │
+│   ├── decision/
+│   │   ├── __init__.py
+│   │   └── engine.py             # DecisionEngine, Recommendation (BUY/HOLD/AVOID)
+│   │
 │   └── app/
 │       ├── __init__.py
-│       ├── streamlit_app.py      # Streamlit GUI (5 tabs + sidebar)
-│       └── i18n.py               # All UI strings in EN and ES
+│       └── streamlit_app.py      # 6-tab Streamlit GUI
 │
 ├── scripts/
 │   └── example.py                # CLI example script
 │
 ├── tests/
 │   ├── conftest.py               # Shared fixtures & seeds
-│   ├── test_models.py            # 9 model architectures
-│   ├── test_trainer.py           # Training / prediction / persistence
-│   ├── test_evaluator.py         # Metric calculations
+│   ├── test_models.py            # 3 forecaster architectures
+│   ├── test_trainer.py           # Training loop, predict, save/load
+│   ├── test_evaluator.py         # Trajectory & quantile metrics
 │   ├── test_diagnostics.py       # Loss-curve analysis
 │   ├── test_features.py          # Feature engineering & sequences
-│   └── test_suite.py             # Legacy test runner
+│   ├── test_registry.py          # ModelRegistry persistence
+│   └── test_decision.py          # DecisionEngine & Recommendation
 │
-└── models/                       # Saved .pth model weights (git-ignored)
+└── data/model_registry/          # Saved model artifacts (git-ignored)
 ```
 
 ---
@@ -90,24 +114,31 @@ gld-price-prediction-dl/
 
 | Module | Key Export | Purpose |
 |--------|-----------|---------|
-| `gldpred.config` | `DataConfig`, `ModelConfig`, `TrainingConfig` | Typed configuration via `@dataclass` |
-| `gldpred.data` | `GLDDataLoader` | Download & cache GLD OHLCV data via yfinance |
-| `gldpred.features` | `FeatureEngineering` | Compute 28 technical features (SMA, EMA, RSI, MACD, …) |
-| `gldpred.models` | 9 model classes (see below) | PyTorch `nn.Module` subclasses |
-| `gldpred.training` | `ModelTrainer` | Train/val loop, StandardScaler, reg/cls/multitask, save/load |
-| `gldpred.evaluation` | `ModelEvaluator` | Regression, classification & multitask metrics |
-| `gldpred.inference` | `Predictor` | Convenience wrapper for batch prediction + signal generation |
+| `gldpred.config` | `DataConfig`, `ModelConfig`, `TrainingConfig`, `DecisionConfig`, `AppConfig`, `SUPPORTED_ASSETS` | Typed configuration via `@dataclass` |
+| `gldpred.data` | `AssetDataLoader` | Download & cache OHLCV data for any supported ticker via yfinance |
+| `gldpred.features` | `FeatureEngineering` | Compute 30+ technical features (SMA, EMA, RSI, MACD, …); build multi-step sequences |
+| `gldpred.models` | `GRUForecaster`, `LSTMForecaster`, `TCNForecaster` | PyTorch `nn.Module` subclasses for quantile trajectory forecasting |
+| `gldpred.training` | `ModelTrainer`, `pinball_loss` | Train/val loop with pinball loss, StandardScaler, temporal split |
+| `gldpred.evaluation` | `ModelEvaluator` | Trajectory metrics (`evaluate_trajectory`) and quantile calibration (`evaluate_quantiles`) |
+| `gldpred.inference` | `TrajectoryPredictor`, `TrajectoryForecast` | Price-path reconstruction from return forecasts + signal generation |
 | `gldpred.diagnostics` | `DiagnosticsAnalyzer` | Heuristic loss-curve analysis (verdict + suggestions) |
-| `gldpred.app.i18n` | `STRINGS`, `LANGUAGES` | Dictionary-based i18n (English / Spanish) |
-| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 5 tabs |
+| `gldpred.registry` | `ModelRegistry` | Persist, load, list, and delete trained model artifacts |
+| `gldpred.decision` | `DecisionEngine`, `Recommendation` | Convert forecast trajectories into BUY / HOLD / AVOID with confidence |
+| `gldpred.i18n` | `STRINGS`, `LANGUAGES` | Dictionary-based i18n (English / Spanish) |
+| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 6 tabs |
 
 ### Model classes (all in `gldpred.models`)
 
-| Architecture | Regression | Classification | Multi-task |
-|-------------|-----------|---------------|------------|
-| GRU | `GRURegressor` | `GRUClassifier` | `GRUMultiTask` |
-| LSTM | `LSTMRegressor` | `LSTMClassifier` | `LSTMMultiTask` |
-| TCN | `TCNRegressor` | `TCNClassifier` | `TCNMultiTask` |
+| Architecture | Class | Default |
+|-------------|-------|---------|
+| GRU | `GRUForecaster` | |
+| LSTM | `LSTMForecaster` | |
+| TCN | `TCNForecaster` | ✔ (default) |
+
+All three share the same constructor signature and output contract:
+
+- **Constructor:** `(input_size, hidden_size=64, num_layers=2, dropout=0.2, forecast_steps=20, quantiles=(0.1, 0.5, 0.9))`
+- **`forward()` → `Tensor` of shape `(batch, K, Q)`** where `K = forecast_steps` and `Q = len(quantiles)`.
 
 ---
 
@@ -119,9 +150,10 @@ gld-price-prediction-dl/
 | PyTorch | ≥ 2.0 | Deep learning framework |
 | Streamlit | ≥ 1.30 | Web GUI |
 | yfinance | ≥ 0.2 | Market data download |
-| scikit-learn | ≥ 1.3 | Preprocessing (StandardScaler, train_test_split), metrics |
+| scikit-learn | ≥ 1.3 | Preprocessing (StandardScaler), metrics |
 | pandas / numpy | ≥ 2.0 / ≥ 1.24 | Data manipulation |
 | matplotlib / plotly | ≥ 3.7 / ≥ 5.18 | Training plots / interactive charts |
+| joblib | ≥ 1.3 | Scaler serialisation in model artifacts |
 
 ---
 
@@ -136,28 +168,35 @@ gld-price-prediction-dl/
 ### 5.2 Package structure
 - Each domain has its own sub-package under `src/gldpred/`.
 - `__init__.py` re-exports the public API so users can write
-  `from gldpred.data import GLDDataLoader`.
+  `from gldpred.data import AssetDataLoader`.
+- `config` and `i18n` are standalone packages (not nested under `app`).
 - Private helpers start with `_`.
 
 ### 5.3 PyTorch models
 - All models subclass `nn.Module`.
-- Constructor signature: `(input_size, hidden_size=64, num_layers=2, dropout=0.2)`.
-- **Single-output models:** `forward()` returns a tensor of shape `(batch,)`.
-  Regression outputs raw values; classification applies sigmoid.
-- **Multi-task models:** `forward()` returns a tuple `(reg_out, cls_logits)`
-  where `cls_logits` are **raw logits** (no sigmoid — the loss uses
-  `BCEWithLogitsLoss` for numerical stability).
+- Constructor signature:
+  `(input_size, hidden_size=64, num_layers=2, dropout=0.2, forecast_steps=20, quantiles=(0.1, 0.5, 0.9))`.
+- **Unified output:** `forward()` returns a tensor of shape
+  `(batch, K, Q)` where `K = forecast_steps` and `Q = len(quantiles)`.
+  There is no separate regression / classification / multi-task split.
+- **Loss function:** pinball (quantile) loss, implemented as
+  `pinball_loss()` in `training/trainer.py`.
 - TCN models use causal dilated 1-D convolutions with exponential dilation
   and residual connections (`_CausalConv1dBlock`, `_TCNBackbone`).
-- Multi-task models use `_MultiTaskWrapper` which attaches `reg_head` and
-  `cls_head` on top of any backbone.
+- TCN is the **default architecture** in the Streamlit app.
 
-### 5.4 i18n
-- Every user-facing string lives in `src/gldpred/app/i18n.py` under
+### 5.4 Features & sequences
+- `FeatureEngineering.select_features()` returns a **DataFrame** of
+  selected feature columns.
+- `FeatureEngineering.create_sequences()` returns targets of shape
+  `(N, K)` — a multi-step forecast target — not `(N,)`.
+
+### 5.5 i18n
+- Every user-facing string lives in `src/gldpred/i18n/__init__.py` under
   `STRINGS["en"]` and `STRINGS["es"]`.
 - In the Streamlit app, call `t = _t()` then use `t["key_name"]`.
 - Key naming convention: `<section>_<purpose>`, e.g. `train_header`,
-  `pred_actual_returns`, `eval_cm_ylabel`, `tut_s3_body`.
+  `forecast_fan_chart`, `rec_confidence`, `tut_s3_body`.
 - When adding new UI text, add the key to **both** `"en"` and `"es"`.
 
 ---
@@ -171,11 +210,10 @@ pip install -r requirements.txt
 # Run the Streamlit app
 streamlit run app.py
 
-# Run tests (pytest)
+# Run tests (pytest — 62 tests across 7 files)
 pytest
-
-# Run legacy tests
-python tests/test_suite.py
+pytest -v                       # verbose
+pytest tests/test_models.py     # single module
 
 # Run the CLI example
 python scripts/example.py
@@ -189,18 +227,21 @@ python scripts/example.py
 
 These are strictly off-limits unless explicitly requested:
 
-- Loss functions and optimiser configuration in `ModelTrainer`.
+- Pinball loss function and optimiser configuration in `ModelTrainer`.
 - Feature engineering formulas in `FeatureEngineering`.
-- Model architectures (layer structure, activation functions) in `architectures.py`.
+- Model architectures (layer structure, activation functions, output shape)
+  in `architectures.py`.
 - Evaluation metric calculations in `ModelEvaluator`.
-- Sequence creation and train/val splitting logic.
+- Sequence creation and temporal train/val splitting logic.
+- Decision engine thresholds and recommendation logic in `DecisionEngine`.
 
 **Safe to change:**
 - UI layout, styling, and new Streamlit widgets in `streamlit_app.py`.
-- i18n strings in `i18n.py` (add/fix translations).
-- Documentation files (`README.md`, `USER_GUIDE.md`).
-- Test coverage in `tests/test_suite.py`.
-- Configuration defaults in `config.py`.
+- i18n strings in `i18n/__init__.py` (add/fix translations).
+- Documentation files (`README.md`, `USER_GUIDE.md`, `AGENTS.md`).
+- Test coverage in `tests/`.
+- Configuration defaults in `config/__init__.py`.
+- `SUPPORTED_ASSETS` list (to add new tickers).
 
 ---
 
@@ -208,30 +249,44 @@ These are strictly off-limits unless explicitly requested:
 
 ### Adding a new model architecture
 1. Create the `nn.Module` sub-class in `models/architectures.py`.
+   It must accept `forecast_steps` and `quantiles` in its constructor
+   and return `(batch, K, Q)` from `forward()`.
 2. Export it from `models/__init__.py`.
-3. Add entries to `_MODEL_MAP` in `streamlit_app.py` for each task
-   (regression, classification, multitask).
-4. Add a sidebar option in `streamlit_app.py` (update the `model_type`
-   selectbox).
-5. Add the corresponding i18n keys in `i18n.py` (both EN and ES).
-6. Add parametric test entries in `tests/test_models.py`.
+3. Add the architecture option to the sidebar selectbox in
+   `streamlit_app.py`.
+4. Add the corresponding i18n keys in `i18n/__init__.py` (both EN and ES).
+5. Add parametric test entries in `tests/test_models.py`.
+
+### Adding a new supported asset
+1. Add the ticker string to the `SUPPORTED_ASSETS` tuple in
+   `config/__init__.py`.
+2. No further code changes needed — `AssetDataLoader` and the Streamlit
+   sidebar dynamically read from `SUPPORTED_ASSETS`.
 
 ### Adding a new language
 1. Choose an ISO 639-1 code (e.g. `"fr"`).
-2. Add `"Français": "fr"` to the `LANGUAGES` dict in `i18n.py`.
+2. Add `"Français": "fr"` to the `LANGUAGES` dict in `i18n/__init__.py`.
 3. Add `"fr": { ... }` to `STRINGS` with all the same keys as `"en"`.
 4. No changes needed in `streamlit_app.py` — the language selector picks
    up new entries automatically.
 
 ### Adding a new evaluation metric
-1. Implement it in `evaluation/evaluator.py` inside the appropriate method.
+1. Implement it in `evaluation/evaluator.py` inside `evaluate_trajectory`
+   or `evaluate_quantiles`.
 2. Add the metric name to the returned dict.
-3. Display it in Tab 4 of `streamlit_app.py` (use i18n keys).
+3. Display it in the Evaluation tab of `streamlit_app.py` (use i18n keys).
 
 ### Adding a new feature
 1. Add the computation in `features/engineering.py`.
 2. The feature is automatically included because `ModelTrainer` selects
    all numeric columns from the engineered DataFrame.
+
+### Adding a new decision rule
+1. Extend or modify `DecisionEngine` in `decision/engine.py`.
+2. If new recommendation types are needed, update the `Recommendation`
+   dataclass.
+3. Add corresponding i18n keys and update the Recommendation tab in
+   `streamlit_app.py`.
 
 ---
 
@@ -240,13 +295,10 @@ These are strictly off-limits unless explicitly requested:
 Run the test suite with:
 
 ```bash
-# Preferred — pytest (74+ tests)
+# pytest (62 tests across 7 files)
 pytest
-pytest -v            # verbose
-pytest tests/test_models.py  # single module
-
-# Legacy runner
-python tests/test_suite.py
+pytest -v                       # verbose
+pytest tests/test_models.py     # single module
 ```
 
 ### Test layout
@@ -254,12 +306,13 @@ python tests/test_suite.py
 | File | Covers |
 |------|--------|
 | `tests/conftest.py` | Shared fixtures: seeds, synthetic data, OHLCV |
-| `tests/test_models.py` | All 9 model architectures (shape, gradient, sigmoid range) |
+| `tests/test_models.py` | 3 forecaster architectures (output shape, gradient flow) |
 | `tests/test_trainer.py` | Data preparation, training loop, predict, save/load |
-| `tests/test_evaluator.py` | Regression, classification, multitask metrics |
+| `tests/test_evaluator.py` | Trajectory & quantile calibration metrics |
 | `tests/test_diagnostics.py` | Loss-curve verdicts (healthy, overfit, underfit, noisy) |
-| `tests/test_features.py` | Feature engineering, sequences, multitask targets |
-| `tests/test_suite.py` | Legacy test runner (kept for backwards compatibility) |
+| `tests/test_features.py` | Feature engineering, multi-step sequences |
+| `tests/test_registry.py` | ModelRegistry save, load, list, delete |
+| `tests/test_decision.py` | DecisionEngine recommendations & confidence |
 
 When adding new functionality, add corresponding parametric tests.
 Tests should be self-contained and not require network access (mock yfinance
@@ -272,11 +325,16 @@ reproducible seeds and synthetic data.
 
 | Pitfall | Explanation |
 |---------|-------------|
-| Forgetting both languages | Every new string must be added to `STRINGS["en"]` **and** `STRINGS["es"]` |
-| Comparing translated sidebar values | Task type detection uses `t["sidebar_task_regression"]` — don't compare against hardcoded English strings |
+| Forgetting both languages | Every new string must be added to `STRINGS["en"]` **and** `STRINGS["es"]` in `i18n/__init__.py` |
+| Comparing translated sidebar values | Asset / model selection uses translated keys — don't compare against hardcoded English strings |
 | Editing `app.py` instead of `streamlit_app.py` | `app.py` is just a bootstrap; all GUI logic is in `src/gldpred/app/streamlit_app.py` |
-| Large model files in git | `.pth` files should be in `.gitignore`; they are generated by training |
+| Large model files in git | Model artifacts in `data/model_registry/` should be git-ignored |
 | Breaking the `_t()` pattern | Always call `t = _t()` at the top of each tab/section; `t` must be resolved fresh for each render |
-| Multi-task cls_logits vs probabilities | Multi-task `forward()` returns raw logits; apply `sigmoid()` only at inference, not during loss computation |
-| Forgetting `_MODEL_MAP` | When adding a model, update the `_MODEL_MAP` dict in `streamlit_app.py` or the model won't appear in the UI |
+| Wrong output shape | All models return `(batch, K, Q)` — never `(batch,)` or a tuple. Verify shape in tests |
+| Using MSE/BCE loss | The project uses **pinball (quantile) loss** exclusively. Do not introduce MSE or BCE |
+| Forgetting `forecast_steps` / `quantiles` args | Model constructors require these; omitting them will use defaults `(20, (0.1, 0.5, 0.9))` |
+| Treating targets as `(N,)` | `create_sequences` returns multi-step targets of shape `(N, K)` |
+| Old i18n path | i18n is now at `src/gldpred/i18n/__init__.py`, **not** `src/gldpred/app/i18n.py` |
+| Old data loader class | Use `AssetDataLoader`, not the removed `GLDDataLoader` |
 | Diagnostics on short runs | `DiagnosticsAnalyzer` needs ≥ 4 epochs; fewer returns a "not enough data" verdict |
+| Hardcoding asset ticker | Always use `SUPPORTED_ASSETS` from `config`; never hardcode `"GLD"` |

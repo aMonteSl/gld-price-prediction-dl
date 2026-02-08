@@ -1,1 +1,1 @@
-"""Streamlit application module."""
+"""Streamlit GUI sub-package."""

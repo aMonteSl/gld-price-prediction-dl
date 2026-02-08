@@ -1,172 +1,182 @@
-"""Training pipeline for GLD price prediction models.
+"""Training pipeline with pinball loss for multi-step quantile forecasting.
 
-Supports three task modes:
-
-* **regression** — predict continuous future returns (MSE loss).
-* **classification** — predict buy/no-buy signal (BCE loss).
-* **multitask** — shared backbone with both heads
-  (weighted MSE + BCEWithLogits).
+Supports training from scratch and fine-tuning loaded models.
 """
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
-# Valid task strings
-TASKS = {"regression", "classification", "multitask"}
 
+# ------------------------------------------------------------------
+# Loss
+# ------------------------------------------------------------------
+
+def pinball_loss(
+    y_pred: torch.Tensor,
+    y_true: torch.Tensor,
+    quantiles: torch.Tensor,
+) -> torch.Tensor:
+    """Quantile (pinball) loss.
+
+    Args:
+        y_pred: (B, K, Q) predicted quantile values.
+        y_true: (B, K) observed values.
+        quantiles: (Q,) quantile levels, e.g. [0.1, 0.5, 0.9].
+
+    Returns:
+        Scalar loss.
+    """
+    errors = y_true.unsqueeze(-1) - y_pred  # (B, K, Q)
+    loss = torch.max(quantiles * errors, (quantiles - 1) * errors)
+    return loss.mean()
+
+
+# ------------------------------------------------------------------
+# Trainer
+# ------------------------------------------------------------------
 
 class ModelTrainer:
-    """Train, evaluate, and persist PyTorch prediction models."""
+    """Train and evaluate multi-step quantile forecasting models."""
 
     def __init__(
         self,
         model: nn.Module,
-        task: str = "regression",
+        quantiles: Tuple[float, ...] = (0.1, 0.5, 0.9),
         device: Optional[torch.device] = None,
-        *,
-        w_reg: float = 1.0,
-        w_cls: float = 1.0,
     ) -> None:
-        if task not in TASKS:
-            raise ValueError(f"task must be one of {TASKS}, got '{task}'")
-
         self.model = model
-        self.task = task
+        self.quantiles_tuple = quantiles
+        self._q = torch.tensor(quantiles, dtype=torch.float32)
         self.device = device or torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
         self.model.to(self.device)
-
-        # Loss setup
-        self.w_reg = w_reg
-        self.w_cls = w_cls
-        if task == "regression":
-            self.criterion = nn.MSELoss()
-        elif task == "classification":
-            self.criterion = nn.BCELoss()
-        else:  # multitask
-            self._mse = nn.MSELoss()
-            self._bce_logits = nn.BCEWithLogitsLoss()
-
         self.scaler = StandardScaler()
-        self.history: Dict[str, List[float]] = {"train_loss": [], "val_loss": []}
+        self.history: Dict[str, List[float]] = {
+            "train_loss": [],
+            "val_loss": [],
+        }
 
     # ------------------------------------------------------------------
     # Data preparation
     # ------------------------------------------------------------------
+
     def prepare_data(
         self,
         X: np.ndarray,
         y: np.ndarray,
         test_size: float = 0.2,
         batch_size: int = 32,
+        *,
+        refit_scaler: bool = True,
     ) -> Tuple[DataLoader, DataLoader]:
-        """Prepare train/val DataLoaders from numpy arrays.
+        """Prepare train/val DataLoaders with temporal split.
 
-        For *multitask* mode ``y`` must have shape ``(N, 2)`` — column 0 is
-        the regression target and column 1 is the classification label.
+        Args:
+            X: (N, seq_len, F) input sequences.
+            y: (N, K) multi-step return targets.
+            refit_scaler: if False, the existing scaler is used (fine-tune).
         """
-        # Remove NaN rows
-        if y.ndim == 1:
-            valid = ~np.isnan(y)
-        else:
-            valid = ~np.isnan(y).any(axis=1)
+        # Drop NaN rows
+        valid = (
+            ~np.isnan(y).any(axis=1)
+            & ~np.isnan(X.reshape(X.shape[0], -1)).any(axis=1)
+        )
         X, y = X[valid], y[valid]
 
-        X_train, X_val, y_train, y_val = train_test_split(
-            X, y, test_size=test_size, shuffle=False
-        )
+        # Temporal split — no shuffling
+        split = int(len(X) * (1 - test_size))
+        X_train, X_val = X[:split], X[split:]
+        y_train, y_val = y[:split], y[split:]
 
-        # Normalise features
-        n_samples, n_steps, n_feat = X_train.shape
-        X_train_s = self.scaler.fit_transform(
-            X_train.reshape(-1, n_feat)
-        ).reshape(n_samples, n_steps, n_feat)
+        # Scale features
+        n_tr, s, f = X_train.shape
+        if refit_scaler:
+            X_train_s = self.scaler.fit_transform(
+                X_train.reshape(-1, f)
+            ).reshape(n_tr, s, f)
+        else:
+            X_train_s = self.scaler.transform(
+                X_train.reshape(-1, f)
+            ).reshape(n_tr, s, f)
+
+        n_va = X_val.shape[0]
         X_val_s = self.scaler.transform(
-            X_val.reshape(-1, n_feat)
-        ).reshape(-1, n_steps, n_feat)
+            X_val.reshape(-1, f)
+        ).reshape(n_va, s, f)
 
-        def _to_loader(X_arr: np.ndarray, y_arr: np.ndarray, shuffle: bool) -> DataLoader:
-            tensors = [torch.FloatTensor(X_arr), torch.FloatTensor(y_arr)]
+        def _loader(xa, ya, shuffle):
             return DataLoader(
-                TensorDataset(*tensors), batch_size=batch_size, shuffle=shuffle
+                TensorDataset(
+                    torch.FloatTensor(xa),
+                    torch.FloatTensor(ya),
+                ),
+                batch_size=batch_size,
+                shuffle=shuffle,
             )
 
-        return _to_loader(X_train_s, y_train, True), _to_loader(X_val_s, y_val, False)
-
-    # ------------------------------------------------------------------
-    # Loss computation
-    # ------------------------------------------------------------------
-    def _compute_loss(
-        self,
-        outputs: torch.Tensor | Tuple[torch.Tensor, torch.Tensor],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
-        if self.task == "multitask":
-            reg_out, cls_logits = outputs
-            reg_target = targets[:, 0]
-            cls_target = targets[:, 1]
-            loss_reg = self._mse(reg_out, reg_target)
-            loss_cls = self._bce_logits(cls_logits, cls_target)
-            return self.w_reg * loss_reg + self.w_cls * loss_cls
-        return self.criterion(outputs, targets)
+        return _loader(X_train_s, y_train, True), _loader(X_val_s, y_val, False)
 
     # ------------------------------------------------------------------
     # Training loop
     # ------------------------------------------------------------------
+
     def train(
         self,
         train_loader: DataLoader,
         val_loader: DataLoader,
         epochs: int = 50,
         learning_rate: float = 0.001,
+        on_epoch: Optional[Callable] = None,
     ) -> Dict[str, List[float]]:
-        """Run the training loop and return the loss history."""
+        """Run training loop and return loss history.
+
+        Args:
+            on_epoch: optional callback ``(epoch_0based, total, history)``.
+        """
         optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        q = self._q.to(self.device)
 
         for epoch in range(epochs):
             # --- train ---
             self.model.train()
             running = 0.0
-            for batch_X, batch_y in train_loader:
-                batch_X = batch_X.to(self.device)
-                batch_y = batch_y.to(self.device)
+            for bx, by in train_loader:
+                bx, by = bx.to(self.device), by.to(self.device)
                 optimizer.zero_grad()
-                outputs = self.model(batch_X)
-                loss = self._compute_loss(outputs, batch_y)
+                pred = self.model(bx)
+                loss = pinball_loss(pred, by, q)
                 loss.backward()
                 optimizer.step()
                 running += loss.item()
-            train_loss = running / len(train_loader)
+            self.history["train_loss"].append(running / len(train_loader))
 
             # --- val ---
             self.model.eval()
             running = 0.0
             with torch.no_grad():
-                for batch_X, batch_y in val_loader:
-                    batch_X = batch_X.to(self.device)
-                    batch_y = batch_y.to(self.device)
-                    outputs = self.model(batch_X)
-                    loss = self._compute_loss(outputs, batch_y)
+                for bx, by in val_loader:
+                    bx, by = bx.to(self.device), by.to(self.device)
+                    pred = self.model(bx)
+                    loss = pinball_loss(pred, by, q)
                     running += loss.item()
-            val_loss = running / len(val_loader)
+            self.history["val_loss"].append(running / len(val_loader))
 
-            self.history["train_loss"].append(train_loss)
-            self.history["val_loss"].append(val_loss)
-
-            if (epoch + 1) % 10 == 0:
+            if on_epoch:
+                on_epoch(epoch, epochs, self.history)
+            elif (epoch + 1) % 10 == 0:
                 print(
-                    f"Epoch [{epoch+1}/{epochs}], "
-                    f"Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}"
+                    f"Epoch [{epoch+1}/{epochs}] "
+                    f"Train: {self.history['train_loss'][-1]:.6f}  "
+                    f"Val: {self.history['val_loss'][-1]:.6f}"
                 )
 
         return self.history
@@ -174,48 +184,43 @@ class ModelTrainer:
     # ------------------------------------------------------------------
     # Prediction
     # ------------------------------------------------------------------
-    def predict(self, X: np.ndarray) -> np.ndarray | Tuple[np.ndarray, np.ndarray]:
-        """Run inference. Returns raw numpy predictions.
 
-        For *multitask* returns ``(reg_preds, cls_probs)`` where
-        ``cls_probs`` has sigmoid already applied.
-        """
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """Run inference. Returns (N, K, Q) numpy array."""
         self.model.eval()
-        n_samples, n_steps, n_feat = X.shape
-        X_s = self.scaler.transform(X.reshape(-1, n_feat)).reshape(n_samples, n_steps, n_feat)
+        n, s, f = X.shape
+        X_s = self.scaler.transform(X.reshape(-1, f)).reshape(n, s, f)
         X_t = torch.FloatTensor(X_s).to(self.device)
-
         with torch.no_grad():
-            outputs = self.model(X_t)
-
-        if self.task == "multitask":
-            reg_out, cls_logits = outputs
-            return reg_out.cpu().numpy(), torch.sigmoid(cls_logits).cpu().numpy()
-
-        return outputs.cpu().numpy()
+            out = self.model(X_t)
+        return out.cpu().numpy()
 
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
-    def save_model(self, filepath: str) -> None:
+
+    def save_checkpoint(self, filepath: str) -> None:
+        """Save model weights, scaler, and training state."""
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         torch.save(
             {
                 "model_state_dict": self.model.state_dict(),
                 "scaler": self.scaler,
-                "task": self.task,
-                "w_reg": self.w_reg,
-                "w_cls": self.w_cls,
+                "quantiles": self.quantiles_tuple,
+                "history": self.history,
             },
             filepath,
         )
-        print(f"Model saved to {filepath}")
 
-    def load_model(self, filepath: str) -> None:
-        ckpt = torch.load(filepath, map_location=self.device, weights_only=False)
+    def load_checkpoint(self, filepath: str) -> None:
+        """Load model weights, scaler, and training history."""
+        ckpt = torch.load(
+            filepath, map_location=self.device, weights_only=False,
+        )
         self.model.load_state_dict(ckpt["model_state_dict"])
         self.scaler = ckpt["scaler"]
-        self.task = ckpt["task"]
-        self.w_reg = ckpt.get("w_reg", 1.0)
-        self.w_cls = ckpt.get("w_cls", 1.0)
-        print(f"Model loaded from {filepath}")
+        self.quantiles_tuple = ckpt.get("quantiles", self.quantiles_tuple)
+        self._q = torch.tensor(self.quantiles_tuple, dtype=torch.float32)
+        prev = ckpt.get("history")
+        if prev:
+            self.history = prev

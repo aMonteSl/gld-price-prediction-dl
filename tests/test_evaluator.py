@@ -1,72 +1,78 @@
-"""Tests for evaluator — regression, classification, and multi-task metrics."""
+"""Tests for trajectory and quantile evaluation metrics."""
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
 from gldpred.evaluation import ModelEvaluator
+from conftest import FORECAST_STEPS, QUANTILES
 
 
-class TestRegressionMetrics:
-    def test_perfect_predictions(self):
-        y = np.array([1.0, 2.0, 3.0, 4.0])
-        metrics = ModelEvaluator.evaluate_regression(y, y)
-        assert metrics["mse"] == pytest.approx(0.0, abs=1e-9)
-        assert metrics["r2"] == pytest.approx(1.0, abs=1e-9)
+class TestTrajectoryMetrics:
+    def test_perfect_prediction(self):
+        """Zero error when predictions match targets."""
+        y = np.random.randn(20, FORECAST_STEPS).astype(np.float32) * 0.01
+        metrics = ModelEvaluator.evaluate_trajectory(y, y)
+        assert metrics["mse"] == pytest.approx(0.0, abs=1e-7)
+        assert metrics["rmse"] == pytest.approx(0.0, abs=1e-7)
+        assert metrics["mae"] == pytest.approx(0.0, abs=1e-7)
+        assert metrics["directional_accuracy"] == pytest.approx(1.0, abs=1e-7)
 
-    def test_keys_present(self):
-        y_true = np.random.randn(50)
-        y_pred = y_true + np.random.randn(50) * 0.1
-        metrics = ModelEvaluator.evaluate_regression(y_true, y_pred)
-        for key in ("mse", "rmse", "mae", "r2"):
-            assert key in metrics
+    def test_nonzero_error(self):
+        """Metrics are positive for imperfect predictions."""
+        y_true = np.random.randn(30, FORECAST_STEPS).astype(np.float32) * 0.01
+        y_pred = y_true + np.random.randn(30, FORECAST_STEPS).astype(np.float32) * 0.005
+        metrics = ModelEvaluator.evaluate_trajectory(y_true, y_pred)
+        assert metrics["mse"] > 0
+        assert metrics["rmse"] > 0
+        assert metrics["mae"] > 0
+        assert 0 <= metrics["directional_accuracy"] <= 1
 
-    def test_rmse_equals_sqrt_mse(self):
-        y_true = np.random.randn(50)
-        y_pred = np.random.randn(50)
-        metrics = ModelEvaluator.evaluate_regression(y_true, y_pred)
-        assert metrics["rmse"] == pytest.approx(np.sqrt(metrics["mse"]), abs=1e-9)
+    def test_per_step_keys(self):
+        """Result contains per-step breakdowns."""
+        y = np.random.randn(20, FORECAST_STEPS).astype(np.float32) * 0.01
+        p = y + 0.001
+        metrics = ModelEvaluator.evaluate_trajectory(y, p)
+        assert len(metrics["mse_per_step"]) == FORECAST_STEPS
+        assert len(metrics["mae_per_step"]) == FORECAST_STEPS
+        assert len(metrics["dir_acc_per_step"]) == FORECAST_STEPS
 
-
-class TestClassificationMetrics:
-    def test_perfect_predictions(self):
-        y = np.array([1, 0, 1, 0, 1], dtype=float)
-        preds = np.array([0.9, 0.1, 0.8, 0.2, 0.7])
-        metrics = ModelEvaluator.evaluate_classification(y, preds)
-        assert metrics["accuracy"] == pytest.approx(1.0)
-        assert metrics["f1"] == pytest.approx(1.0)
-
-    def test_keys_present(self):
-        y = np.array([1, 0, 1, 0])
-        preds = np.array([0.6, 0.4, 0.7, 0.3])
-        metrics = ModelEvaluator.evaluate_classification(y, preds)
-        for key in ("accuracy", "precision", "recall", "f1"):
-            assert key in metrics
-
-    def test_confusion_matrix(self):
-        y = np.array([1, 0, 1, 0], dtype=float)
-        preds = np.array([0.9, 0.1, 0.8, 0.2])
-        metrics = ModelEvaluator.evaluate_classification(y, preds)
-        assert "confusion_matrix" in metrics
-        cm = metrics["confusion_matrix"]
-        assert len(cm) == 2 and len(cm[0]) == 2
+    def test_nan_filtering(self):
+        """Rows with NaN targets are excluded."""
+        y_true = np.random.randn(10, FORECAST_STEPS).astype(np.float32)
+        y_true[0, :] = np.nan
+        y_pred = y_true.copy()
+        y_pred[0, :] = 0
+        metrics = ModelEvaluator.evaluate_trajectory(y_true, y_pred)
+        # Should compute on 9 rows, and perfect match for those
+        assert metrics["mse"] == pytest.approx(0.0, abs=1e-7)
 
 
-class TestMultitaskMetrics:
-    def test_keys_have_prefixes(self):
-        y_reg = np.random.randn(50)
-        y_cls = np.random.randint(0, 2, 50).astype(float)
-        p_reg = y_reg + 0.01
-        p_cls = np.random.rand(50)
-        metrics = ModelEvaluator.evaluate_multitask(y_reg, p_reg, y_cls, p_cls)
-        assert "reg_mse" in metrics
-        assert "cls_accuracy" in metrics
-        assert "threshold" in metrics
+class TestQuantileMetrics:
+    def test_coverage_keys(self):
+        """Coverage keys present for each quantile."""
+        y_true = np.random.randn(30, FORECAST_STEPS) * 0.01
+        y_pred = np.random.randn(30, FORECAST_STEPS, len(QUANTILES)) * 0.01
+        metrics = ModelEvaluator.evaluate_quantiles(y_true, y_pred, list(QUANTILES))
+        assert "q10_coverage" in metrics
+        assert "q50_coverage" in metrics
+        assert "q90_coverage" in metrics
 
-    def test_threshold_passed_through(self):
-        y_reg = np.random.randn(20)
-        y_cls = np.random.randint(0, 2, 20).astype(float)
-        metrics = ModelEvaluator.evaluate_multitask(
-            y_reg, y_reg, y_cls, np.random.rand(20), cls_threshold=0.7
-        )
-        assert metrics["threshold"] == 0.7
+    def test_interval_width(self):
+        """Interval width is non-negative."""
+        y_true = np.random.randn(30, FORECAST_STEPS) * 0.01
+        # Ensure P90 > P10
+        y_pred = np.zeros((30, FORECAST_STEPS, 3))
+        y_pred[:, :, 0] = -0.01  # P10
+        y_pred[:, :, 1] = 0.0    # P50
+        y_pred[:, :, 2] = 0.01   # P90
+        metrics = ModelEvaluator.evaluate_quantiles(y_true, y_pred, list(QUANTILES))
+        assert metrics["mean_interval_width"] >= 0
+
+    def test_calibration_error(self):
+        """Calibration error is between 0 and 1."""
+        y_true = np.random.randn(50, FORECAST_STEPS) * 0.01
+        y_pred = np.random.randn(50, FORECAST_STEPS, 3) * 0.01
+        metrics = ModelEvaluator.evaluate_quantiles(y_true, y_pred, list(QUANTILES))
+        for q in [10, 50, 90]:
+            assert 0 <= metrics[f"q{q}_cal_error"] <= 1.0

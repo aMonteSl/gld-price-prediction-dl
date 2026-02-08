@@ -1,5 +1,5 @@
-"""Inference module for predictions and signal generation."""
+"""Inference module for trajectory prediction."""
 
-from gldpred.inference.predictor import Predictor
+from gldpred.inference.predictor import TrajectoryPredictor
 
-__all__ = ["Predictor"]
+__all__ = ["TrajectoryPredictor"]

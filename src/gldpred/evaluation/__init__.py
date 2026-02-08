@@ -1,4 +1,4 @@
-"""Evaluation metrics and reporting module."""
+"""Evaluation metrics for multi-step quantile forecasts."""
 
 from gldpred.evaluation.evaluator import ModelEvaluator
 

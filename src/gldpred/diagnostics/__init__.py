@@ -1,4 +1,4 @@
-"""Auto-training diagnostics — analyse loss curves and recommend actions."""
+"""Training diagnostics — analyse loss curves and recommend actions."""
 
 from gldpred.diagnostics.analyzer import DiagnosticsAnalyzer
 

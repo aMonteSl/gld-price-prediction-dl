@@ -1,4 +1,4 @@
-"""Feature engineering module for technical indicators and preprocessing."""
+"""Feature engineering module."""
 
 from gldpred.features.engineering import FeatureEngineering
 

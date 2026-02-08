@@ -1,104 +1,96 @@
-"""Evaluation metrics for regression, classification, and multi-task models."""
+"""Evaluation metrics for multi-step trajectory and quantile forecasts."""
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import numpy as np
-from sklearn.metrics import (
-    accuracy_score,
-    confusion_matrix,
-    f1_score,
-    mean_absolute_error,
-    mean_squared_error,
-    precision_score,
-    r2_score,
-    recall_score,
-)
 
 
 class ModelEvaluator:
-    """Compute and display model performance metrics."""
+    """Compute trajectory accuracy and quantile calibration metrics."""
 
+    # ------------------------------------------------------------------
+    # Trajectory (median) metrics
+    # ------------------------------------------------------------------
     @staticmethod
-    def evaluate_regression(
-        y_true: np.ndarray, y_pred: np.ndarray
-    ) -> Dict[str, float]:
-        """Return MSE, RMSE, MAE, R² for a regression task."""
-        mask = ~np.isnan(y_true) & ~np.isnan(y_pred)
-        yt, yp = y_true[mask], y_pred[mask]
-        mse = float(mean_squared_error(yt, yp))
+    def evaluate_trajectory(
+        y_true: np.ndarray,
+        y_pred_median: np.ndarray,
+    ) -> Dict[str, Any]:
+        """Evaluate median trajectory predictions.
+
+        Args:
+            y_true: (N, K) actual future returns.
+            y_pred_median: (N, K) P50 predicted returns.
+
+        Returns:
+            Dict with MSE, RMSE, MAE, directional accuracy.
+        """
+        mask = ~np.isnan(y_true).any(axis=1)
+        yt, yp = y_true[mask], y_pred_median[mask]
+
+        mse_per_step = np.mean((yt - yp) ** 2, axis=0)
+        mae_per_step = np.mean(np.abs(yt - yp), axis=0)
+        dir_per_step = np.mean(np.sign(yt) == np.sign(yp), axis=0)
+
+        overall_mse = float(np.mean(mse_per_step))
         return {
-            "mse": mse,
-            "rmse": float(np.sqrt(mse)),
-            "mae": float(mean_absolute_error(yt, yp)),
-            "r2": float(r2_score(yt, yp)),
+            "mse": overall_mse,
+            "rmse": float(np.sqrt(overall_mse)),
+            "mae": float(np.mean(mae_per_step)),
+            "directional_accuracy": float(np.mean(dir_per_step)),
+            "mse_per_step": mse_per_step.tolist(),
+            "mae_per_step": mae_per_step.tolist(),
+            "dir_acc_per_step": dir_per_step.tolist(),
         }
 
+    # ------------------------------------------------------------------
+    # Quantile calibration
+    # ------------------------------------------------------------------
     @staticmethod
-    def evaluate_classification(
+    def evaluate_quantiles(
         y_true: np.ndarray,
         y_pred: np.ndarray,
-        threshold: float = 0.5,
-    ) -> Dict[str, Any]:
-        """Return accuracy, precision, recall, F1, confusion-matrix."""
-        mask = ~np.isnan(y_true) & ~np.isnan(y_pred)
-        yt, yp = y_true[mask], y_pred[mask]
-        yb = (yp > threshold).astype(int)
-        metrics: Dict[str, Any] = {
-            "accuracy": float(accuracy_score(yt, yb)),
-            "precision": float(precision_score(yt, yb, zero_division=0)),
-            "recall": float(recall_score(yt, yb, zero_division=0)),
-            "f1": float(f1_score(yt, yb, zero_division=0)),
-        }
-        cm = confusion_matrix(yt, yb)
-        if cm.shape == (2, 2):
-            metrics["confusion_matrix"] = cm.tolist()
-        return metrics
+        quantiles: List[float],
+    ) -> Dict[str, float]:
+        """Evaluate quantile calibration.
 
-    @staticmethod
-    def evaluate_multitask(
-        y_true_reg: np.ndarray,
-        y_pred_reg: np.ndarray,
-        y_true_cls: np.ndarray,
-        y_pred_cls: np.ndarray,
-        cls_threshold: float = 0.5,
-    ) -> Dict[str, Any]:
-        """Evaluate a multi-task model (regression + classification).
+        Args:
+            y_true: (N, K) actual returns.
+            y_pred: (N, K, Q) predicted quantiles.
+            quantiles: Q quantile levels (e.g. [0.1, 0.5, 0.9]).
 
-        Returns a single dict with ``reg_*`` and ``cls_*`` prefixed keys
-        plus ``threshold``.
+        Returns:
+            Dict with per-quantile coverage and calibration error.
         """
-        reg = ModelEvaluator.evaluate_regression(y_true_reg, y_pred_reg)
-        cls = ModelEvaluator.evaluate_classification(
-            y_true_cls, y_pred_cls, threshold=cls_threshold
-        )
-        combined: Dict[str, Any] = {"threshold": cls_threshold}
-        for k, v in reg.items():
-            combined[f"reg_{k}"] = v
-        for k, v in cls.items():
-            combined[f"cls_{k}"] = v
-        return combined
+        mask = ~np.isnan(y_true).any(axis=1)
+        yt, yp = y_true[mask], y_pred[mask]
 
+        result: Dict[str, float] = {}
+        for qi, q in enumerate(quantiles):
+            frac = float(np.mean(yt < yp[:, :, qi]))
+            result[f"q{int(q * 100)}_coverage"] = frac
+            result[f"q{int(q * 100)}_cal_error"] = abs(frac - q)
+
+        if len(quantiles) >= 2:
+            width = yp[:, :, -1] - yp[:, :, 0]
+            result["mean_interval_width"] = float(np.mean(width))
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Print helper
+    # ------------------------------------------------------------------
     @staticmethod
-    def print_metrics(metrics: Dict[str, Any], task: str = "regression") -> None:
-        """Pretty-print metrics to stdout."""
-        print(f"\n{task.upper()} METRICS:")
+    def print_metrics(metrics: Dict[str, Any]) -> None:
+        """Pretty-print a metrics dictionary."""
+        print("\nMETRICS:")
         print("=" * 50)
-        if task == "regression":
-            for k in ("mse", "rmse", "mae", "r2"):
-                print(f"  {k.upper():6s}: {metrics[k]:.6f}")
-        elif task == "classification":
-            for k in ("accuracy", "precision", "recall", "f1"):
-                print(f"  {k.capitalize():10s}: {metrics[k]:.4f}")
-            if "confusion_matrix" in metrics:
-                print(f"  CM: {metrics['confusion_matrix']}")
-        elif task == "multitask":
-            print("  --- Regression ---")
-            for k in ("reg_mse", "reg_rmse", "reg_mae", "reg_r2"):
-                print(f"    {k:12s}: {metrics[k]:.6f}")
-            print("  --- Classification ---")
-            for k in ("cls_accuracy", "cls_precision", "cls_recall", "cls_f1"):
-                print(f"    {k:16s}: {metrics[k]:.4f}")
-            if "cls_confusion_matrix" in metrics:
-                print(f"    CM: {metrics['cls_confusion_matrix']}")
+        for k, v in metrics.items():
+            if isinstance(v, list):
+                print(f"  {k}: [{', '.join(f'{x:.6f}' for x in v)}]")
+            elif isinstance(v, float):
+                print(f"  {k}: {v:.6f}")
+            else:
+                print(f"  {k}: {v}")
         print("=" * 50)

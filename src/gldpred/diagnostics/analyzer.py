@@ -1,7 +1,6 @@
-"""Analyse training/validation loss curves and produce human-readable diagnostics.
+"""Analyse training/validation loss curves and produce diagnostics.
 
-The main entry point is :func:`DiagnosticsAnalyzer.analyze` which returns a
-:class:`DiagnosticsResult` dataclass suitable for display in the Streamlit UI.
+Main entry point: :func:`DiagnosticsAnalyzer.analyze`.
 """
 from __future__ import annotations
 
@@ -13,7 +12,7 @@ import numpy as np
 
 @dataclass
 class DiagnosticsResult:
-    """Structured output of a training diagnostics analysis."""
+    """Structured diagnostics output."""
 
     verdict: str = "healthy"
     explanation: str = ""
@@ -33,18 +32,7 @@ class DiagnosticsAnalyzer:
         *,
         tail_fraction: float = 0.25,
     ) -> DiagnosticsResult:
-        """Analyse training & validation loss curves.
-
-        Args:
-            history: dict with keys ``"train_loss"`` and ``"val_loss"``
-                     (lists of per-epoch float values).
-            tail_fraction: fraction of the last epochs used to compute
-                           slopes (default 25 %).
-
-        Returns:
-            A :class:`DiagnosticsResult` with verdict, explanation, and
-            actionable suggestions.
-        """
+        """Analyse train & val loss curves and return a verdict."""
         train = np.asarray(history["train_loss"], dtype=float)
         val = np.asarray(history["val_loss"], dtype=float)
         n = len(train)
@@ -60,7 +48,6 @@ class DiagnosticsAnalyzer:
         best_epoch = int(np.argmin(val))
         gap = float(val[-1] - train[-1])
 
-        # Slopes over last N epochs
         tail = max(int(n * tail_fraction), 2)
         t_slope = float(_slope(train[-tail:]))
         v_slope = float(_slope(val[-tail:]))
@@ -72,12 +59,11 @@ class DiagnosticsAnalyzer:
             val_slope=v_slope,
         )
 
-        # Classification heuristics
         if v_slope > 0 and t_slope < -1e-7:
             result.verdict = "overfitting"
             result.explanation = (
-                "Validation loss is rising while training loss keeps decreasing — "
-                "the model is memorising the training data."
+                "Validation loss is rising while training loss keeps "
+                "decreasing — the model is memorising the training data."
             )
             result.suggestions = [
                 f"Stop training earlier (best epoch ≈ {best_epoch + 1}).",
@@ -85,11 +71,15 @@ class DiagnosticsAnalyzer:
                 "Increase dropout.",
                 "Use more training data (longer date range).",
             ]
-        elif t_slope > -1e-7 and v_slope > -1e-7 and train[-1] > 0.5 * train[0]:
+        elif (
+            t_slope > -1e-7
+            and v_slope > -1e-7
+            and train[-1] > 0.5 * train[0]
+        ):
             result.verdict = "underfitting"
             result.explanation = (
-                "Both training and validation loss remain high and flat — the "
-                "model lacks capacity or the learning rate is too low."
+                "Both losses remain high and flat — the model lacks "
+                "capacity or the learning rate is too low."
             )
             result.suggestions = [
                 "Increase hidden size or number of layers.",
@@ -100,8 +90,8 @@ class DiagnosticsAnalyzer:
         elif _is_noisy(val, tail):
             result.verdict = "noisy"
             result.explanation = (
-                "The validation loss curve oscillates significantly — training "
-                "is unstable."
+                "The validation loss oscillates significantly — "
+                "training is unstable."
             )
             result.suggestions = [
                 "Lower the learning rate.",
@@ -111,8 +101,8 @@ class DiagnosticsAnalyzer:
         else:
             result.verdict = "healthy"
             result.explanation = (
-                "Both loss curves are decreasing with a stable gap — training "
-                "converged normally."
+                "Both loss curves are decreasing with a stable gap — "
+                "training converged normally."
             )
             result.suggestions = [
                 "Current settings look good.",
@@ -122,12 +112,7 @@ class DiagnosticsAnalyzer:
         return result
 
 
-# ------------------------------------------------------------------
-# Internal helpers
-# ------------------------------------------------------------------
-
 def _slope(arr: np.ndarray) -> float:
-    """Least-squares slope of *arr* over its index."""
     n = len(arr)
     if n < 2:
         return 0.0
@@ -136,7 +121,6 @@ def _slope(arr: np.ndarray) -> float:
 
 
 def _is_noisy(arr: np.ndarray, tail: int, *, threshold: float = 0.15) -> bool:
-    """Return True if the tail coefficient of variation is high."""
     segment = arr[-tail:]
     mean = segment.mean()
     if abs(mean) < 1e-12:

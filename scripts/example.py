@@ -1,5 +1,5 @@
 """
-Example script demonstrating how to use the GLD price prediction models.
+Example script — v3.0 multi-step quantile trajectory forecasting.
 """
 import sys
 import os
@@ -10,89 +10,110 @@ sys.path.insert(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"),
 )
 
-from gldpred.data import GLDDataLoader
+from gldpred.data import AssetDataLoader
 from gldpred.features import FeatureEngineering
-from gldpred.models import GRURegressor, LSTMClassifier
+from gldpred.models import TCNForecaster
 from gldpred.training import ModelTrainer
 from gldpred.evaluation import ModelEvaluator
+from gldpred.inference import TrajectoryPredictor
+from gldpred.diagnostics import DiagnosticsAnalyzer
+from gldpred.decision import DecisionEngine
 import numpy as np
 
 
 def main():
-    print("GLD Price Prediction Example")
-    print("=" * 50)
+    print("Multi-Asset Price Prediction — v3.0 Example")
+    print("=" * 55)
 
     # 1. Load data
-    print("\n1. Loading GLD data...")
-    loader = GLDDataLoader(ticker='GLD')
+    asset = "GLD"
+    print(f"\n1. Loading {asset} data…")
+    loader = AssetDataLoader(ticker=asset)
     data = loader.load_data()
-    print(f"Loaded {len(data)} records")
+    daily_ret = loader.daily_returns()
+    print(f"   Loaded {len(data)} records")
 
     # 2. Feature engineering
-    print("\n2. Creating features...")
-    fe = FeatureEngineering()
-    data_with_features = fe.add_technical_indicators(data)
-    features = fe.select_features(data_with_features)
-    features = features.ffill().bfill()
-    print(f"Created {len(features.columns)} features")
+    print("\n2. Computing technical indicators…")
+    eng = FeatureEngineering()
+    data = eng.add_technical_indicators(data)
+    feature_names = eng.select_features(data)
+    print(f"   {len(feature_names)} features selected")
 
-    # 3. Prepare targets for different horizons
-    horizons = [1, 5, 20]
+    # 3. Multi-step sequences
+    forecast_steps = 20
+    seq_length = 20
+    quantiles = (0.1, 0.5, 0.9)
 
-    for horizon in horizons:
-        print(f"\n{'='*50}")
-        print(f"Training models for {horizon}-day horizon")
-        print(f"{'='*50}")
+    X, y = eng.create_sequences(
+        data[feature_names].values,
+        daily_ret.values,
+        seq_length=seq_length,
+        forecast_steps=forecast_steps,
+    )
+    print(f"   Sequences: X={X.shape}, y={y.shape}")
 
-        # Regression task
-        print(f"\n3. Preparing regression targets (returns)...")
-        targets_reg = loader.compute_returns(horizon=horizon)
-        X_reg, y_reg = fe.create_sequences(features, targets_reg, seq_length=20)
-        print(f"Created {len(X_reg)} sequences for regression")
+    # 4. Train TCN model
+    print("\n3. Training TCN quantile forecaster…")
+    input_size = X.shape[2]
+    model = TCNForecaster(
+        input_size=input_size,
+        hidden_size=64,
+        num_layers=2,
+        forecast_steps=forecast_steps,
+        quantiles=quantiles,
+    )
+    trainer = ModelTrainer(model, quantiles=quantiles, device="cpu")
+    train_loader, val_loader = trainer.prepare_data(X, y, test_size=0.2, batch_size=32)
+    history = trainer.train(train_loader, val_loader, epochs=30, learning_rate=0.001)
+    print(f"   Final train loss: {history['train_loss'][-1]:.6f}")
+    print(f"   Final val   loss: {history['val_loss'][-1]:.6f}")
 
-        # Classification task
-        print(f"\n4. Preparing classification targets (signals)...")
-        targets_clf = loader.compute_signals(horizon=horizon)
-        X_clf, y_clf = fe.create_sequences(features, targets_clf, seq_length=20)
-        print(f"Created {len(X_clf)} sequences for classification")
+    # 5. Diagnostics
+    print("\n4. Training diagnostics…")
+    diag = DiagnosticsAnalyzer.analyze(history)
+    print(f"   Verdict: {diag.verdict}")
+    print(f"   {diag.explanation}")
 
-        # 5. Train regression model (GRU)
-        print(f"\n5. Training GRU regression model...")
-        input_size = X_reg.shape[2]
-        model_reg = GRURegressor(input_size=input_size, hidden_size=64, num_layers=2)
-        trainer_reg = ModelTrainer(model_reg, task='regression')
-        train_loader_reg, val_loader_reg = trainer_reg.prepare_data(X_reg, y_reg, batch_size=32)
-        history_reg = trainer_reg.train(train_loader_reg, val_loader_reg, epochs=30)
+    # 6. Evaluate
+    print("\n5. Evaluation on validation set…")
+    split = int(len(X) * 0.8)
+    y_val = y[split:]
+    pred_val = trainer.predict(X[split:])
+    evaluator = ModelEvaluator()
+    traj_metrics = evaluator.evaluate_trajectory(y_val, pred_val[:, :, 1])
+    quant_metrics = evaluator.evaluate_quantiles(y_val, pred_val, list(quantiles))
+    evaluator.print_metrics(traj_metrics)
+    evaluator.print_metrics(quant_metrics)
 
-        # 6. Evaluate regression model
-        print(f"\n6. Evaluating regression model...")
-        predictions_reg = trainer_reg.predict(X_reg)
-        evaluator = ModelEvaluator()
-        metrics_reg = evaluator.evaluate_regression(y_reg, predictions_reg)
-        evaluator.print_metrics(metrics_reg, task='regression')
+    # 7. Forecast trajectory
+    print("\n6. Generating forecast trajectory…")
+    predictor = TrajectoryPredictor(trainer)
+    forecast = predictor.predict_trajectory(data, feature_names, seq_length, asset)
+    print(f"   Forecast dates: {forecast.dates[0]} → {forecast.dates[-1]}")
+    print(f"   P50 price path: {forecast.price_paths[:, 1].round(2)}")
 
-        # 7. Train classification model (LSTM)
-        print(f"\n7. Training LSTM classification model...")
-        model_clf = LSTMClassifier(input_size=input_size, hidden_size=64, num_layers=2)
-        trainer_clf = ModelTrainer(model_clf, task='classification')
-        train_loader_clf, val_loader_clf = trainer_clf.prepare_data(X_clf, y_clf, batch_size=32)
-        history_clf = trainer_clf.train(train_loader_clf, val_loader_clf, epochs=30)
+    # 8. Decision recommendation
+    print("\n7. Decision support…")
+    engine = DecisionEngine(horizon_days=5)
+    reco = engine.recommend(
+        forecast.returns_quantiles,
+        data,
+        quantiles=forecast.quantiles,
+        diagnostics_verdict=diag.verdict,
+    )
+    print(f"   Action: {reco.action}")
+    print(f"   Confidence: {reco.confidence:.0f}/100")
+    for r in reco.rationale:
+        print(f"   • {r}")
+    if reco.warnings:
+        for w in reco.warnings:
+            print(f"   ⚠ {w}")
 
-        # 8. Evaluate classification model
-        print(f"\n8. Evaluating classification model...")
-        predictions_clf = trainer_clf.predict(X_clf)
-        metrics_clf = evaluator.evaluate_classification(y_clf, predictions_clf)
-        evaluator.print_metrics(metrics_clf, task='classification')
-
-        # 9. Save models
-        print(f"\n9. Saving models...")
-        trainer_reg.save_model(f'models/gru_regression_h{horizon}.pth')
-        trainer_clf.save_model(f'models/lstm_classification_h{horizon}.pth')
-
-    print("\n" + "="*50)
+    print("\n" + "=" * 55)
     print("Example completed successfully!")
-    print("="*50)
+    print("=" * 55)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

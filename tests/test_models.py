@@ -1,113 +1,113 @@
-"""Tests for all model architectures — forward-pass shape & gradient flow."""
+"""Tests for GRUForecaster, LSTMForecaster, TCNForecaster."""
 from __future__ import annotations
 
 import pytest
 import torch
 
-from gldpred.models import (
-    GRURegressor, LSTMRegressor, GRUClassifier, LSTMClassifier,
-    TCNRegressor, TCNClassifier,
-    GRUMultiTask, LSTMMultiTask, TCNMultiTask,
-)
+from gldpred.models import GRUForecaster, LSTMForecaster, TCNForecaster
+from conftest import BATCH_SIZE, FORECAST_STEPS, INPUT_SIZE, NUM_QUANTILES, QUANTILES, SEQ_LENGTH
 
-from conftest import HIDDEN, LAYERS, N_FEATURES, SEQ_LEN
-
-# All single-output models: (class, has_sigmoid)
-_SINGLE_MODELS = [
-    (GRURegressor, False),
-    (LSTMRegressor, False),
-    (TCNRegressor, False),
-    (GRUClassifier, True),
-    (LSTMClassifier, True),
-    (TCNClassifier, True),
+MODELS = [
+    ("GRU", GRUForecaster),
+    ("LSTM", LSTMForecaster),
+    ("TCN", TCNForecaster),
 ]
 
-_MULTI_MODELS = [GRUMultiTask, LSTMMultiTask, TCNMultiTask]
 
-
-class TestSingleOutputModels:
-    """Test regression & classification models (single output)."""
-
-    @pytest.mark.parametrize("cls,has_sigmoid", _SINGLE_MODELS,
-                             ids=lambda x: x.__name__ if isinstance(x, type) else "")
-    def test_output_shape(self, cls, has_sigmoid):
-        model = cls(N_FEATURES, HIDDEN, LAYERS)
-        x = torch.randn(4, SEQ_LEN, N_FEATURES)
-        out = model(x)
-        assert out.shape == (4,), f"Expected (4,), got {out.shape}"
-
-    @pytest.mark.parametrize("cls,has_sigmoid", _SINGLE_MODELS,
-                             ids=lambda x: x.__name__ if isinstance(x, type) else "")
-    def test_sigmoid_range(self, cls, has_sigmoid):
-        model = cls(N_FEATURES, HIDDEN, LAYERS)
-        x = torch.randn(8, SEQ_LEN, N_FEATURES)
-        out = model(x)
-        if has_sigmoid:
-            assert out.min() >= 0.0, "Classifier output < 0"
-            assert out.max() <= 1.0, "Classifier output > 1"
-
-    @pytest.mark.parametrize("cls,has_sigmoid", _SINGLE_MODELS,
-                             ids=lambda x: x.__name__ if isinstance(x, type) else "")
-    def test_gradient_flow(self, cls, has_sigmoid):
-        model = cls(N_FEATURES, HIDDEN, LAYERS)
-        x = torch.randn(4, SEQ_LEN, N_FEATURES)
-        out = model(x)
-        loss = out.sum()
-        loss.backward()
-        grads = [p.grad for p in model.parameters() if p.grad is not None]
-        assert len(grads) > 0, "No gradients computed"
-
-
-class TestMultiTaskModels:
-    """Test multi-task models (tuple output)."""
-
-    @pytest.mark.parametrize("cls", _MULTI_MODELS, ids=lambda c: c.__name__)
-    def test_output_is_tuple(self, cls):
-        model = cls(N_FEATURES, HIDDEN, LAYERS)
-        x = torch.randn(4, SEQ_LEN, N_FEATURES)
-        out = model(x)
-        assert isinstance(out, tuple), f"Expected tuple, got {type(out)}"
-        assert len(out) == 2
-
-    @pytest.mark.parametrize("cls", _MULTI_MODELS, ids=lambda c: c.__name__)
-    def test_output_shapes(self, cls):
-        model = cls(N_FEATURES, HIDDEN, LAYERS)
-        x = torch.randn(4, SEQ_LEN, N_FEATURES)
-        reg_out, cls_out = model(x)
-        assert reg_out.shape == (4,)
-        assert cls_out.shape == (4,)
-
-    @pytest.mark.parametrize("cls", _MULTI_MODELS, ids=lambda c: c.__name__)
-    def test_cls_head_is_raw_logits(self, cls):
-        """Classification head should NOT have sigmoid (raw logits)."""
-        model = cls(N_FEATURES, HIDDEN, LAYERS)
-        x = torch.randn(16, SEQ_LEN, N_FEATURES)
-        _, cls_out = model(x)
-        # Raw logits can be outside [0,1]
-        # With random weights this should produce values outside [0,1] with high prob
-        # We just check it's not clamped — may rarely fail but is statistically sound
-        assert cls_out.min() < 0.0 or cls_out.max() > 1.0 or True  # always pass structurally
-
-    @pytest.mark.parametrize("cls", _MULTI_MODELS, ids=lambda c: c.__name__)
-    def test_gradient_flow(self, cls):
-        model = cls(N_FEATURES, HIDDEN, LAYERS)
-        x = torch.randn(4, SEQ_LEN, N_FEATURES)
-        reg_out, cls_out = model(x)
-        loss = reg_out.sum() + cls_out.sum()
-        loss.backward()
-        grads = [p.grad for p in model.parameters() if p.grad is not None]
-        assert len(grads) > 0
-
-
-class TestParameterCount:
-    """Sanity-check: every model has > 0 trainable parameters."""
-
-    @pytest.mark.parametrize(
-        "cls",
-        [c for c, _ in _SINGLE_MODELS] + _MULTI_MODELS,
-        ids=lambda c: c.__name__,
+@pytest.mark.parametrize("name,cls", MODELS)
+def test_output_shape(name, cls):
+    """Forward pass produces (B, K, Q) output."""
+    model = cls(
+        input_size=INPUT_SIZE,
+        hidden_size=32,
+        num_layers=1,
+        forecast_steps=FORECAST_STEPS,
+        quantiles=QUANTILES,
     )
-    def test_has_parameters(self, cls):
-        model = cls(N_FEATURES, HIDDEN, LAYERS)
-        n = sum(p.numel() for p in model.parameters())
-        assert n > 0, f"{cls.__name__} has 0 parameters"
+    x = torch.randn(BATCH_SIZE, SEQ_LENGTH, INPUT_SIZE)
+    out = model(x)
+    assert out.shape == (BATCH_SIZE, FORECAST_STEPS, NUM_QUANTILES)
+
+
+@pytest.mark.parametrize("name,cls", MODELS)
+def test_gradient_flow(name, cls):
+    """Gradients flow to all parameters."""
+    model = cls(
+        input_size=INPUT_SIZE,
+        hidden_size=32,
+        num_layers=1,
+        forecast_steps=FORECAST_STEPS,
+        quantiles=QUANTILES,
+    )
+    x = torch.randn(BATCH_SIZE, SEQ_LENGTH, INPUT_SIZE)
+    out = model(x)
+    loss = out.sum()
+    loss.backward()
+
+    for pname, p in model.named_parameters():
+        assert p.grad is not None, f"No gradient for {pname}"
+        assert not torch.all(p.grad == 0), f"Zero gradient for {pname}"
+
+
+@pytest.mark.parametrize("name,cls", MODELS)
+def test_different_forecast_steps(name, cls):
+    """Models work with different K values."""
+    for k in [1, 3, 10]:
+        model = cls(
+            input_size=INPUT_SIZE,
+            hidden_size=32,
+            num_layers=1,
+            forecast_steps=k,
+            quantiles=QUANTILES,
+        )
+        x = torch.randn(2, SEQ_LENGTH, INPUT_SIZE)
+        out = model(x)
+        assert out.shape == (2, k, NUM_QUANTILES)
+
+
+@pytest.mark.parametrize("name,cls", MODELS)
+def test_different_quantiles(name, cls):
+    """Models work with different numbers of quantiles."""
+    qs = (0.05, 0.25, 0.5, 0.75, 0.95)
+    model = cls(
+        input_size=INPUT_SIZE,
+        hidden_size=32,
+        num_layers=1,
+        forecast_steps=FORECAST_STEPS,
+        quantiles=qs,
+    )
+    x = torch.randn(2, SEQ_LENGTH, INPUT_SIZE)
+    out = model(x)
+    assert out.shape == (2, FORECAST_STEPS, len(qs))
+
+
+@pytest.mark.parametrize("name,cls", MODELS)
+def test_eval_no_grad(name, cls):
+    """Inference mode works and produces finite values."""
+    model = cls(
+        input_size=INPUT_SIZE,
+        hidden_size=32,
+        num_layers=1,
+        forecast_steps=FORECAST_STEPS,
+        quantiles=QUANTILES,
+    )
+    model.eval()
+    x = torch.randn(BATCH_SIZE, SEQ_LENGTH, INPUT_SIZE)
+    with torch.no_grad():
+        out = model(x)
+    assert torch.isfinite(out).all()
+
+
+@pytest.mark.parametrize("name,cls", MODELS)
+def test_single_sample(name, cls):
+    """Models handle batch size 1."""
+    model = cls(
+        input_size=INPUT_SIZE,
+        hidden_size=32,
+        num_layers=1,
+        forecast_steps=FORECAST_STEPS,
+        quantiles=QUANTILES,
+    )
+    x = torch.randn(1, SEQ_LENGTH, INPUT_SIZE)
+    out = model(x)
+    assert out.shape == (1, FORECAST_STEPS, NUM_QUANTILES)

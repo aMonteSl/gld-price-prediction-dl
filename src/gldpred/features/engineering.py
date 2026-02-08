@@ -1,116 +1,145 @@
-"""
-Feature engineering module for creating technical indicators and features.
-"""
-import pandas as pd
+"""Feature engineering: technical indicators and multi-step sequence creation."""
+from __future__ import annotations
+
 import numpy as np
+import pandas as pd
 
 
 class FeatureEngineering:
-    """Create features from raw price data."""
+    """Compute technical features and create training sequences."""
 
+    # ------------------------------------------------------------------
+    # Indicators
+    # ------------------------------------------------------------------
     @staticmethod
-    def add_technical_indicators(data):
-        """
-        Add technical indicators to the dataframe.
-
-        Args:
-            data: DataFrame with OHLCV data
-
-        Returns:
-            DataFrame with additional feature columns
-        """
+    def add_technical_indicators(data: pd.DataFrame) -> pd.DataFrame:
+        """Add 30+ technical indicators to an OHLCV DataFrame."""
         df = data.copy()
 
-        # Returns
-        df['returns'] = df['Close'].pct_change()
+        # Daily returns
+        df["returns"] = df["Close"].pct_change()
 
-        # Simple Moving Averages
-        for window in [5, 10, 20, 50]:
-            df[f'sma_{window}'] = df['Close'].rolling(window=window).mean()
-            df[f'ema_{window}'] = df['Close'].ewm(span=window, adjust=False).mean()
+        # Moving averages (simple + exponential)
+        for w in [5, 10, 20, 50, 200]:
+            df[f"sma_{w}"] = df["Close"].rolling(w).mean()
+            df[f"ema_{w}"] = df["Close"].ewm(span=w, adjust=False).mean()
 
         # Volatility
-        df['volatility_5'] = df['returns'].rolling(window=5).std()
-        df['volatility_20'] = df['returns'].rolling(window=20).std()
+        df["volatility_5"] = df["returns"].rolling(5).std()
+        df["volatility_20"] = df["returns"].rolling(20).std()
 
-        # Momentum indicators
-        df['momentum_5'] = df['Close'] - df['Close'].shift(5)
-        df['momentum_10'] = df['Close'] - df['Close'].shift(10)
+        # Momentum
+        df["momentum_5"] = df["Close"] - df["Close"].shift(5)
+        df["momentum_10"] = df["Close"] - df["Close"].shift(10)
 
-        # RSI (Relative Strength Index)
-        df['rsi_14'] = FeatureEngineering._compute_rsi(df['Close'], 14)
+        # RSI-14
+        df["rsi_14"] = FeatureEngineering._compute_rsi(df["Close"], 14)
 
         # MACD
-        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-        df['macd'] = exp1 - exp2
-        df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+        exp12 = df["Close"].ewm(span=12, adjust=False).mean()
+        exp26 = df["Close"].ewm(span=26, adjust=False).mean()
+        df["macd"] = exp12 - exp26
+        df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
 
-        # Price position relative to moving averages
-        df['price_to_sma_20'] = df['Close'] / df['sma_20']
-        df['price_to_sma_50'] = df['Close'] / df['sma_50']
+        # Price relative to SMAs
+        df["price_to_sma_20"] = df["Close"] / df["sma_20"]
+        df["price_to_sma_50"] = df["Close"] / df["sma_50"]
+        df["price_to_sma_200"] = df["Close"] / df["sma_200"]
 
-        # Volume indicators
-        df['volume_sma_20'] = df['Volume'].rolling(window=20).mean()
-        df['volume_ratio'] = df['Volume'] / df['volume_sma_20']
+        # Volume
+        df["volume_sma_20"] = df["Volume"].rolling(20).mean()
+        df["volume_ratio"] = df["Volume"] / df["volume_sma_20"]
+
+        # ATR (Average True Range)
+        prev_close = df["Close"].shift(1)
+        tr = pd.concat(
+            [
+                df["High"] - df["Low"],
+                (df["High"] - prev_close).abs(),
+                (df["Low"] - prev_close).abs(),
+            ],
+            axis=1,
+        ).max(axis=1)
+        df["atr_14"] = tr.rolling(14).mean()
+        df["atr_pct"] = df["atr_14"] / df["Close"]
 
         # Lag features
         for lag in [1, 2, 3, 5]:
-            df[f'close_lag_{lag}'] = df['Close'].shift(lag)
-            df[f'returns_lag_{lag}'] = df['returns'].shift(lag)
+            df[f"close_lag_{lag}"] = df["Close"].shift(lag)
+            df[f"returns_lag_{lag}"] = df["returns"].shift(lag)
 
         return df
 
+    # ------------------------------------------------------------------
+    # RSI helper
+    # ------------------------------------------------------------------
     @staticmethod
-    def _compute_rsi(series, period=14):
-        """Compute RSI indicator."""
+    def _compute_rsi(series: pd.Series, period: int = 14) -> pd.Series:
         delta = series.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        gain = delta.where(delta > 0, 0).rolling(period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
         rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
+        return 100 - (100 / (1 + rs))
 
+    # ------------------------------------------------------------------
+    # Feature selection
+    # ------------------------------------------------------------------
     @staticmethod
-    def select_features(data, feature_columns=None):
-        """
-        Select specific feature columns.
-
-        Args:
-            data: DataFrame with all features
-            feature_columns: List of column names to select (None = auto-select)
-
-        Returns:
-            DataFrame with selected features
-        """
+    def select_features(
+        data: pd.DataFrame,
+        feature_columns: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """Select numeric feature columns, excluding raw OHLCV."""
         if feature_columns is None:
-            # Auto-select numeric columns, excluding target variables
-            exclude_cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits']
-            feature_columns = [col for col in data.columns
-                               if col not in exclude_cols and data[col].dtype in [np.float64, np.int64]]
-
+            exclude = {
+                "Open", "High", "Low", "Close", "Volume",
+                "Dividends", "Stock Splits",
+            }
+            feature_columns = [
+                c for c in data.columns
+                if c not in exclude
+                and data[c].dtype in (np.float64, np.int64, np.float32)
+            ]
         return data[feature_columns]
 
+    # ------------------------------------------------------------------
+    # Sequence creation (multi-step)
+    # ------------------------------------------------------------------
     @staticmethod
-    def create_sequences(features, targets, seq_length=20):
-        """
-        Create sequences for time series prediction.
+    def create_sequences(
+        features: pd.DataFrame | np.ndarray,
+        daily_returns: pd.Series | np.ndarray,
+        seq_length: int = 20,
+        forecast_steps: int = 20,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Create input sequences and multi-step return targets.
 
         Args:
-            features: Feature DataFrame
-            targets: Target Series or DataFrame
-            seq_length: Length of input sequences
+            features: (T, F) feature matrix.
+            daily_returns: (T,) daily percentage returns.
+            seq_length: lookback window (number of historical days).
+            forecast_steps: K — number of future days to predict.
 
         Returns:
-            Tuple of (X, y) as numpy arrays
+            X: (N, seq_length, F)
+            y: (N, K)
         """
-        X, y = [], []
+        feat = (
+            features.values if hasattr(features, "values")
+            else np.asarray(features)
+        )
+        rets = (
+            daily_returns.values if hasattr(daily_returns, "values")
+            else np.asarray(daily_returns)
+        )
 
-        features_array = features.values
-        targets_array = targets.values if hasattr(targets, 'values') else targets
+        X: list[np.ndarray] = []
+        y: list[np.ndarray] = []
+        for i in range(len(feat) - seq_length - forecast_steps + 1):
+            X.append(feat[i : i + seq_length])
+            y.append(rets[i + seq_length : i + seq_length + forecast_steps])
 
-        for i in range(len(features_array) - seq_length):
-            X.append(features_array[i:i + seq_length])
-            y.append(targets_array[i + seq_length])
-
-        return np.array(X), np.array(y)
+        return (
+            np.array(X, dtype=np.float32),
+            np.array(y, dtype=np.float32),
+        )

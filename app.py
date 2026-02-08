@@ -14,5 +14,7 @@ _src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-# Import triggers Streamlit execution at module level.
-import gldpred.app.streamlit_app as _app  # noqa: F401, E402
+# Launch the Streamlit application.
+from gldpred.app.streamlit_app import main  # noqa: E402
+
+main()
