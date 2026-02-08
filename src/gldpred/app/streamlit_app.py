@@ -258,12 +258,20 @@ def _tab_train() -> None:
         if not saved:
             st.warning(t["registry_no_models"])
             return
-        labels = [f"{m['model_id']} ({m.get('created_at', '?')[:16]})" for m in saved]
+        labels = [f"{m.get('label', m['model_id'])} — {m.get('created_at', '?')[:16]}" for m in saved]
         choice = st.selectbox(t["train_select_model"], labels)
         selected_model_id = saved[labels.index(choice)]["model_id"]
         epochs_label = t["train_finetune_epochs"]
     else:
         epochs_label = t["sidebar_epochs"]
+
+    # Custom model label input
+    model_label = st.text_input(
+        t["train_label"],
+        placeholder=f"{st.session_state.get('asset', 'GLD')}_{st.session_state.get('architecture', 'TCN')}_v1",
+        help=t["train_label_help"],
+        key="model_label_input",
+    )
 
     btn_label = t["train_finetune_btn"] if is_finetune else t["train_btn"]
     if not st.button(btn_label, key="btn_train"):
@@ -394,6 +402,14 @@ def _tab_train() -> None:
                 feature_names,
                 training_summary,
                 eval_summary,
+                label=model_label.strip() or None,
+            )
+
+            # Get saved label from metadata
+            saved_meta = registry.list_models()
+            saved_label = next(
+                (m["label"] for m in saved_meta if m["model_id"] == model_id),
+                model_id
             )
 
             # Store in session
@@ -405,7 +421,7 @@ def _tab_train() -> None:
             st.session_state["quant_metrics"] = quant_metrics
             st.session_state["last_model_id"] = model_id
 
-            st.success(t["train_success"].format(model_id=model_id))
+            st.success(t["train_label_saved_as"].format(label=saved_label))
 
     except Exception as exc:
         st.error(t["train_error"].format(err=exc))
@@ -414,6 +430,11 @@ def _tab_train() -> None:
 
     # Show diagnostics
     _show_diagnostics()
+
+    # Registry management section
+    st.divider()
+    with st.expander(t["registry_delete_header"]):
+        _show_registry_deletion()
 
 
 def _show_diagnostics() -> None:
@@ -458,6 +479,95 @@ def _show_diagnostics() -> None:
             height=350,
         )
         st.plotly_chart(fig, use_container_width=True)
+
+
+def _show_registry_deletion() -> None:
+    """Show model deletion controls."""
+    t = _t()
+    registry = ModelRegistry()
+    asset = st.session_state.get("asset", "GLD")
+    
+    all_models = registry.list_models()
+    asset_models = registry.list_models(asset=asset)
+    
+    if not all_models:
+        st.info(t["registry_no_models"])
+        return
+    
+    st.markdown(f"**{len(all_models)}** total models · **{len(asset_models)}** {asset} models")
+    
+    # Delete single model
+    st.subheader(t["registry_delete_single"])
+    
+    model_labels = [
+        f"{m.get('label', m['model_id'])} ({m['architecture']}, {m.get('created_at', '?')[:10]})"
+        for m in all_models
+    ]
+    selected = st.selectbox(
+        t["registry_model_details"],
+        model_labels,
+        key="delete_model_select"
+    )
+    selected_model = all_models[model_labels.index(selected)]
+    
+    # Show details
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Asset", selected_model["asset"])
+    col2.metric("Architecture", selected_model["architecture"])
+    col3.metric("Created", selected_model.get("created_at", "?")[:10])
+    
+    confirm_single = st.text_input(
+        t["registry_confirm_single"],
+        placeholder="DELETE",
+        key="confirm_single_delete"
+    )
+    
+    if st.button(t["registry_delete_btn"], key="btn_delete_single"):
+        if confirm_single.strip() == "DELETE":
+            try:
+                registry.delete_model(selected_model["model_id"])
+                st.success(t["registry_delete_success"].format(count=1))
+                st.rerun()
+            except Exception as e:
+                st.error(t["registry_delete_error"].format(err=str(e)))
+        else:
+            st.warning("Confirmation text must be exactly: DELETE")
+    
+    st.divider()
+    
+    # Delete all models (with asset filter option)
+    st.subheader(t["registry_delete_all"])
+    
+    delete_scope = st.radio(
+        "Scope",
+        [f"All models ({len(all_models)})", f"Only {asset} models ({len(asset_models)})"],
+        key="delete_scope",
+        horizontal=True,
+    )
+    delete_asset_only = asset if "Only" in delete_scope else None
+    delete_count = len(asset_models) if delete_asset_only else len(all_models)
+    
+    if delete_count == 0:
+        st.info(t["registry_no_models"])
+        return
+    
+    st.warning(t["registry_confirm_all"].format(count=delete_count))
+    confirm_all = st.text_input(
+        t["registry_confirm_input"],
+        placeholder="DELETE ALL",
+        key="confirm_all_delete"
+    )
+    
+    if st.button(t["registry_delete_btn"], key="btn_delete_all"):
+        if confirm_all.strip() == "DELETE ALL":
+            try:
+                deleted = registry.delete_all_models(asset=delete_asset_only, confirmed=True)
+                st.success(t["registry_delete_success"].format(count=deleted))
+                st.rerun()
+            except Exception as e:
+                st.error(t["registry_delete_error"].format(err=str(e)))
+        else:
+            st.warning("Confirmation text must be exactly: DELETE ALL")
 
 
 # ======================================================================

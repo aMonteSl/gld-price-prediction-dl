@@ -564,15 +564,37 @@ saved model includes:
 
 ### Where models are stored
 
-Models are saved in `data/model_registry/` (git-ignored). Each model gets a
-unique ID like `GLD_TCN_20250613_143052`.
+Models are saved in `data/model_registry/` (git-ignored). Each model has:
+- A **model ID** (auto-generated filesystem-safe identifier, e.g., `20261208_143052_abc123ef`)
+- A **label** (custom human-readable name, e.g., `GLD_TCN_multistep_K20_v1`)
+
+### Custom Model Names
+
+When training a model, you can provide a **custom label** to make it memorable
+and easy to identify later:
+
+**In the Streamlit app:**
+1. Before clicking "Train Model", enter a name in the **Custom Model Name** field
+2. Examples: `GLD_TCN_v1`, `BTC_high_vol_experiment`, `SLV_LSTM_20_steps`
+3. If left empty, the label auto-generates (e.g., `GLD_TCN_20261208_143052`)
+4. Maximum 60 characters
+
+**From code:**
+```python
+model_id = registry.save_model(
+    model, scaler, config, feature_names, training_summary,
+    label="MyAwesomeModel_v1"  # Optional custom label
+)
+```
 
 ### Using the Registry
 
 **From the Streamlit app:**
 - After training, the model is automatically saved to the registry.
 - In the Train tab, select **Fine-tune** and choose a saved model from the
-  dropdown to continue training.
+  dropdown (models are listed by label, not model ID).
+- The **Delete Models** expander at the bottom of the Train tab lets you
+  delete individual models or bulk-delete by asset.
 
 **From code:**
 ```python
@@ -584,15 +606,66 @@ registry = ModelRegistry()
 # List saved models
 models = registry.list_models(asset="GLD", architecture="TCN")
 for m in models:
-    print(m["model_id"], m["val_loss"])
+    print(m["label"], m["asset"], m["created_at"], m.get("training_summary", {}).get("final_val_loss"))
 
-# Load a model
+# Load a model (use model_id, not label)
 model, scaler, metadata = registry.load_model(
-    model_id="GLD_TCN_20250613_143052",
+    model_id="20261208_143052_abc123ef",
     model_class=TCNForecaster,
     input_size=30
 )
 ```
+
+### Deleting Models
+
+**Why delete models?**
+- Free disk space from experiments you no longer need
+- Keep the registry clean and organized
+- Remove poorly-performing models
+
+**From the Streamlit app:**
+1. Go to the Train tab
+2. Expand the **Delete Models** section at the bottom
+3. **Delete single model:**
+   - Select the model from the dropdown
+   - Type `DELETE` exactly in the confirmation field
+   - Click "Confirm Delete"
+4. **Delete all models:**
+   - Choose scope (all models or just current asset)
+   - Type `DELETE ALL` exactly in the confirmation field
+   - Click "Confirm Delete"
+
+**From code:**
+```python
+# Delete a single model
+registry.delete_model(model_id="20261208_143052_abc123ef")
+
+# Delete all GLD models
+registry.delete_all_models(asset="GLD", confirmed=True)
+
+# Delete ALL models (use with extreme caution)
+registry.delete_all_models(confirmed=True)
+```
+
+**Safety notes:**
+- Deletion is **permanent** — there is no undo
+- Model files (weights, scaler, metadata) are removed from disk
+- The confirmation prompts prevent accidental deletion
+- Attempting to delete a non-existent model raises `FileNotFoundError`
+
+### Model ID vs Label
+
+| Aspect | Model ID | Label |
+|--------|----------|-------|
+| **Purpose** | Internal filesystem identifier | Human-readable display name |
+| **Format** | Auto-generated timestamp + UUID | Your custom text |
+| **Example** | `20261208_143052_abc123ef` | `GLD_TCN_multistep_K20_v1` |
+| **Where used** | API calls, file paths | UI dropdowns, lists, success messages |
+| **Can change?** | No — fixed at creation | No — set once at training |
+
+When you list or fine-tune models in the app, you see the **label** (e.g.,
+`MyAwesomeModel_v1 (TCN, 2026-12-08)`). Internally, the registry uses the
+**model ID** to locate files.
 
 ---
 

@@ -6,6 +6,7 @@ containing weights, scaler, and metadata JSON.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import uuid
 from datetime import datetime
@@ -18,6 +19,7 @@ import torch
 import torch.nn as nn
 
 DEFAULT_REGISTRY_DIR = Path("data") / "model_registry"
+MAX_LABEL_LENGTH = 60
 
 
 class ModelRegistry:
@@ -38,12 +40,34 @@ class ModelRegistry:
         feature_names: List[str],
         training_summary: Dict[str, Any],
         evaluation_summary: Optional[Dict[str, Any]] = None,
+        label: Optional[str] = None,
     ) -> str:
         """Save a trained model with all artifacts.
+
+        Args:
+            model: Trained PyTorch model.
+            scaler: Fitted StandardScaler.
+            config: Model configuration dict.
+            feature_names: List of feature column names.
+            training_summary: Training history and metrics.
+            evaluation_summary: Optional evaluation metrics.
+            label: Optional custom name for the model (max 60 chars).
+                   If omitted, auto-generated from timestamp.
 
         Returns:
             model_id string.
         """
+        # Validate and sanitize label
+        if label:
+            label = _validate_label(label)
+        else:
+            # Auto-generate label from asset and architecture
+            asset = config.get("asset", "GLD")
+            arch = config.get("architecture", "TCN")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            label = f"{asset}_{arch}_{timestamp}"
+
+        # Generate unique model_id (filesystem-safe)
         model_id = (
             datetime.now().strftime("%Y%m%d_%H%M%S")
             + "_"
@@ -57,6 +81,7 @@ class ModelRegistry:
 
         metadata = {
             "model_id": model_id,
+            "label": label,
             "asset": config.get("asset", "GLD"),
             "architecture": config.get("architecture", "TCN"),
             "created_at": datetime.now().isoformat(),
@@ -132,14 +157,79 @@ class ModelRegistry:
     # Delete
     # ------------------------------------------------------------------
     def delete_model(self, model_id: str) -> None:
+        """Delete a single model by ID.
+
+        Args:
+            model_id: The unique model identifier.
+
+        Raises:
+            FileNotFoundError: If the model does not exist.
+        """
         model_dir = self.base_dir / model_id
-        if model_dir.exists():
-            shutil.rmtree(model_dir)
+        if not model_dir.exists():
+            raise FileNotFoundError(
+                f"Model '{model_id}' not found in registry"
+            )
+        shutil.rmtree(model_dir)
+
+    def delete_all_models(
+        self, asset: Optional[str] = None, confirmed: bool = False
+    ) -> int:
+        """Delete all models matching optional asset filter.
+
+        Args:
+            asset: If provided, only delete models for this asset.
+            confirmed: Must be True to actually delete (safety check).
+
+        Returns:
+            Number of models deleted.
+
+        Raises:
+            ValueError: If confirmed is not True.
+        """
+        if not confirmed:
+            raise ValueError(
+                "Must set confirmed=True to delete all models"
+            )
+
+        models = self.list_models(asset=asset)
+        count = 0
+        for meta in models:
+            model_id = meta["model_id"]
+            model_dir = self.base_dir / model_id
+            if model_dir.exists():
+                shutil.rmtree(model_dir)
+                count += 1
+        return count
 
 
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
+def _validate_label(label: str) -> str:
+    """Validate and sanitize a custom model label.
+
+    Args:
+        label: User-provided label.
+
+    Returns:
+        Sanitized label string.
+
+    Raises:
+        ValueError: If label is empty or too long.
+    """
+    label = label.strip()
+    if not label:
+        raise ValueError("Model label cannot be empty")
+    if len(label) > MAX_LABEL_LENGTH:
+        raise ValueError(
+            f"Model label too long (max {MAX_LABEL_LENGTH} chars)"
+        )
+    # Preserve original label exactly (don't sanitize for filesystem)
+    # Only model_id needs to be filesystem-safe; label is for display only
+    return label
+
 
 def _serializable(obj: Any) -> Any:
     """Recursively convert numpy/torch types for JSON."""

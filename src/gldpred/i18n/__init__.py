@@ -93,6 +93,25 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
         "train_finetune_epochs": "Additional Epochs",
         "train_select_model": "Select Model to Fine-tune",
+        "train_label": "Custom Model Name (optional)",
+        "train_label_help": "Give your model a memorable name (max 60 chars). If empty, auto-generated.",
+        "train_label_saved_as": "Model saved as: {label}",
+        
+        # -- Registry Management ------------------------------------------
+        "registry_header": "Model Registry",
+        "registry_delete_header": "Delete Models",
+        "registry_delete_single": "Delete Selected Model",
+        "registry_delete_all": "Delete All Models",
+        "registry_delete_all_asset": "Delete All {asset} Models",
+        "registry_confirm_header": "⚠️ Confirm Deletion",
+        "registry_confirm_single": "Type DELETE to confirm deletion of:",
+        "registry_confirm_all": "Type DELETE ALL to confirm deletion of {count} models.",
+        "registry_confirm_input": "Confirmation",
+        "registry_delete_btn": "Confirm Delete",
+        "registry_delete_success": "Deleted {count} model(s).",
+        "registry_delete_error": "Deletion error: {err}",
+        "registry_no_models": "No models in registry.",
+        "registry_model_details": "Model Details",
 
         # -- Diagnostics --------------------------------------------------
         "diag_header": "Training Diagnostics",
@@ -472,8 +491,25 @@ The registry is stored in `data/model_registry/` (git-ignored).
             "cada día futuro. Los resultados se guardan en el registro."
         ),
         "train_finetune_epochs": "Épocas adicionales",
-        "train_select_model": "Seleccionar modelo a ajustar",
-
+        "train_select_model": "Seleccionar modelo a ajustar",        "train_label": "Nombre personalizado del modelo (opcional)",
+        "train_label_help": "Dale a tu modelo un nombre memorable (máx. 60 caracteres). Si está vacío, se genera automáticamente.",
+        "train_label_saved_as": "Modelo guardado como: {label}",
+        
+        # -- Registry Management ------------------------------------------
+        "registry_header": "Registro de modelos",
+        "registry_delete_header": "Eliminar modelos",
+        "registry_delete_single": "Eliminar modelo seleccionado",
+        "registry_delete_all": "Eliminar todos los modelos",
+        "registry_delete_all_asset": "Eliminar todos los modelos de {asset}",
+        "registry_confirm_header": "⚠️ Confirmar eliminación",
+        "registry_confirm_single": "Escriba DELETE para confirmar la eliminación de:",
+        "registry_confirm_all": "Escriba DELETE ALL para confirmar la eliminación de {count} modelos.",
+        "registry_confirm_input": "Confirmación",
+        "registry_delete_btn": "Confirmar eliminación",
+        "registry_delete_success": "Eliminados {count} modelo(s).",
+        "registry_delete_error": "Error de eliminación: {err}",
+        "registry_no_models": "No hay modelos en el registro.",
+        "registry_model_details": "Detalles del modelo",
         # -- Diagnostics --------------------------------------------------
         "diag_header": "Diagnósticos del entrenamiento",
         "diag_verdict": "Veredicto",

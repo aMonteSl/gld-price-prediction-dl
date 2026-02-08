@@ -234,10 +234,83 @@ Each recommendation includes:
 
 ---
 
+## Model Registry
+
+Trained models are saved to the **model registry** (`data/model_registry/`), a persistent storage system that preserves:
+- Model weights (PyTorch state dict)
+- Scaler (fitted StandardScaler)
+- Metadata (architecture, asset, training date, validation loss, feature names, etc.)
+
+### Custom Model Names
+
+When training a model, you can provide a **custom label** (max 60 chars) to make it memorable:
+
+```python
+model_id = registry.save_model(
+    model, scaler, config, feature_names, training_summary,
+    label="GLD_TCN_multistep_K20_v1"
+)
+```
+
+If omitted, the label auto-generates from asset and architecture (e.g., `GLD_TCN_20261208_143052`).
+
+**In the Streamlit app:** The Train tab has a text input where you can enter a custom name before training.
+
+### Listing & Loading Models
+
+```python
+from gldpred.registry import ModelRegistry
+from gldpred.models import TCNForecaster
+
+registry = ModelRegistry()
+
+# List all models
+models = registry.list_models()
+for m in models:
+    print(m["label"], m["asset"], m["architecture"], m["created_at"])
+
+# List filtered by asset/architecture
+gld_models = registry.list_models(asset="GLD", architecture="TCN")
+
+# Load a model
+model, scaler, metadata = registry.load_model(
+    model_id="20261208_143052_abc123ef",
+    model_class=TCNForecaster,
+    input_size=30
+)
+```
+
+### Deleting Models
+
+**Single model:**
+```python
+registry.delete_model(model_id="20261208_143052_abc123ef")
+```
+
+**Bulk deletion:**
+```python
+# Delete all models for a specific asset
+registry.delete_all_models(asset="GLD", confirmed=True)
+
+# Delete ALL models (use with caution)
+registry.delete_all_models(confirmed=True)
+```
+
+**In the Streamlit app:** The Train tab has an expandable "Delete Models" section with dropdowns and confirmation inputs. You must type `DELETE` or `DELETE ALL` exactly to confirm.
+
+### Model ID vs Label
+
+- **Model ID** — Auto-generated unique identifier (filesystem-safe, e.g., `20261208_143052_abc123ef`)
+- **Label** — Custom human-readable name (e.g., `MyAwesomeModel_v1`)
+
+The label is stored in metadata and displayed throughout the UI, making it easy to identify models. The model ID is used internally for file storage and API calls.
+
+---
+
 ## Testing
 
 ```bash
-# Run all 62 tests
+# Run all 70 tests
 pytest
 
 # Verbose output
