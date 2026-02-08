@@ -28,7 +28,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "sidebar_asset": "Asset / Ticker",
         "sidebar_data_settings": "Data Settings",
         "sidebar_start_date": "Start Date",
-        "sidebar_end_date_auto": "End date: today (auto)",
+        "sidebar_date_range": "Date range: All available history → today (auto)",
         "sidebar_model_settings": "Model Settings",
         "sidebar_model_arch": "Architecture",
         "sidebar_forecast_steps": "Forecast Steps (K days)",

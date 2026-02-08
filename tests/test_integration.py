@@ -133,11 +133,10 @@ class TestDataLoaderConfig:
         sig = inspect.signature(AssetDataLoader.__init__)
         assert "end_date" not in sig.parameters
 
-    def test_default_start_date_approx_5_years(self):
+    def test_loads_full_history(self):
+        """AssetDataLoader fetches all available history via period='max'."""
         from gldpred.data import AssetDataLoader
-        from datetime import datetime, timedelta
+        import inspect
 
-        loader = AssetDataLoader(ticker="GLD")
-        expected = datetime.now() - timedelta(days=365 * 5)
-        # Within 2 days tolerance
-        assert abs((loader.start_date - expected).days) <= 2
+        sig = inspect.signature(AssetDataLoader.__init__)
+        assert "start_date" not in sig.parameters

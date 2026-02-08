@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Optional, Tuple
+from typing import Tuple
 
 SUPPORTED_ASSETS = ("GLD", "SLV", "BTC-USD", "PALL")
 
@@ -12,15 +11,10 @@ SUPPORTED_ASSETS = ("GLD", "SLV", "BTC-USD", "PALL")
 class DataConfig:
     """Configuration for data loading.
 
-    ``end_date`` is always *today* — it is not user-configurable.
+    Data is loaded from the asset's first available date to today (auto).
     """
 
     ticker: str = "GLD"
-    start_date: Optional[datetime] = None
-
-    def __post_init__(self) -> None:
-        if self.start_date is None:
-            self.start_date = datetime.now() - timedelta(days=365 * 5)
 
 
 @dataclass

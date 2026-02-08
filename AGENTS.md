@@ -116,7 +116,7 @@ gld-price-prediction-dl/
 | Module | Key Export | Purpose |
 |--------|-----------|---------|
 | `gldpred.config` | `DataConfig`, `ModelConfig`, `TrainingConfig`, `DecisionConfig`, `AppConfig`, `SUPPORTED_ASSETS` | Typed configuration via `@dataclass` |
-| `gldpred.data` | `AssetDataLoader` | Download & cache OHLCV data for any supported ticker via yfinance |
+| `gldpred.data` | `AssetDataLoader` | Download & cache OHLCV data from asset inception to today for any supported ticker via yfinance |
 | `gldpred.features` | `FeatureEngineering` | Compute 30+ technical features (SMA, EMA, RSI, MACD, …); build multi-step sequences |
 | `gldpred.models` | `GRUForecaster`, `LSTMForecaster`, `TCNForecaster` | PyTorch `nn.Module` subclasses for quantile trajectory forecasting |
 | `gldpred.training` | `ModelTrainer`, `pinball_loss` | Train/val loop with pinball loss, StandardScaler, temporal split |

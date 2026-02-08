@@ -64,12 +64,23 @@ forecast horizon, and all training hyperparameters.
 
 Historical data is fetched via **yfinance**, a Python library that retrieves
 daily market data from Yahoo Finance. When you press *Load Data*, the app
-downloads daily OHLCV (Open, High, Low, Close, Volume) records for the
-selected asset, starting from the configured start date **up to today**
-(the end date is always set to the current date automatically).
+downloads **all available historical OHLCV** (Open, High, Low, Close, Volume)
+records for the selected asset — **from the asset's first trading date until
+today**.
 
 **BTC-USD** trades 7 days a week, while ETFs (GLD, SLV, PALL) only trade on
 weekdays. The app handles both calendars automatically.
+
+### Historical data ranges
+
+| Asset | Typical start date | History span |
+|-------|-------------------|-------------|
+| **GLD** | November 2004 | ~20 years |
+| **SLV** | April 2006 | ~18 years |
+| **BTC-USD** | September 2014 | ~11 years |
+| **PALL** | January 2010 | ~16 years |
+
+*Actual ranges depend on Yahoo Finance data availability and may vary.*
 
 ### What each column represents
 

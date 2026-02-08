@@ -5,7 +5,6 @@ Six tabs: Data · Train · Forecast · Recommendation · Evaluation · Tutorial.
 from __future__ import annotations
 
 import traceback
-from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 import numpy as np
@@ -117,14 +116,7 @@ def _sidebar() -> None:
             index=0,
             key="asset",
         )
-
-        # ── Data ─────────────────────────────────────────────────────
-        st.subheader(t["sidebar_data_settings"])
-        default_start = datetime.now() - timedelta(days=365 * 5)
-        st.date_input(
-            t["sidebar_start_date"], value=default_start, key="start_date",
-        )
-        st.caption(t["sidebar_end_date_auto"])
+        st.caption(t["sidebar_date_range"])
 
         # ── Model ────────────────────────────────────────────────────
         st.subheader(t["sidebar_model_settings"])

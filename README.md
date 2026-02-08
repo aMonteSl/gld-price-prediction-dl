@@ -34,7 +34,7 @@ evaluate performance, and follow a built-in tutorial — all from the browser.
 
 ## Features
 
-- **Data Loading** — Full history up to today for any supported asset via yfinance (end date is always today)
+- **Data Loading** — Full historical data from asset inception to today for any supported ticker via yfinance
 - **Feature Engineering** — 30+ technical indicators (SMA, EMA, RSI, MACD, ATR, Bollinger, lags, …)
 - **Deep Learning Models**
   - **GRU** / **LSTM** / **TCN** (default) backbones
