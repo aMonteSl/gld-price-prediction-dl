@@ -164,10 +164,7 @@ def _tab_data() -> None:
         try:
             with st.spinner(t["data_loading_spinner"]):
                 asset = st.session_state.get("asset", "GLD")
-                loader = AssetDataLoader(
-                    ticker=asset,
-                    start_date=st.session_state.get("start_date"),
-                )
+                loader = AssetDataLoader(ticker=asset)
                 df = loader.load_data()
                 daily_ret = loader.daily_returns()
 
