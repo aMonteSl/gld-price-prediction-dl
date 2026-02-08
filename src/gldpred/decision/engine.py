@@ -1,7 +1,9 @@
 """Rule-based decision engine for trade recommendations.
 
-Combines forecast trajectories, trend filters, and volatility analysis to
-produce a **BUY / HOLD / AVOID** recommendation with confidence and rationale.
+Combines forecast trajectories, trend filters, volatility analysis,
+market regime detection, and model health gating to produce a
+**BUY / HOLD / AVOID** recommendation with confidence, risk metrics,
+stop-loss / take-profit levels, and rationale.
 
 .. warning::
     This is a **decision-support tool**, not financial advice.
@@ -9,21 +11,39 @@ produce a **BUY / HOLD / AVOID** recommendation with confidence and rationale.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
 
+# ======================================================================
+# Data classes
+# ======================================================================
+
+@dataclass
+class RiskMetrics:
+    """Quantitative risk assessment accompanying a recommendation."""
+
+    stop_loss_pct: float = 0.0      # suggested stop-loss (negative %)
+    take_profit_pct: float = 0.0    # suggested take-profit (positive %)
+    risk_reward_ratio: float = 0.0  # |take_profit / stop_loss|
+    max_drawdown_pct: float = 0.0   # worst peak-to-trough in forecast
+    volatility_regime: str = "normal"  # "low", "normal", "high"
+
+
 @dataclass
 class Recommendation:
     """Output of the decision engine."""
 
-    action: str  # "BUY", "HOLD", "AVOID"
-    confidence: float  # 0-100
+    action: str                          # "BUY", "HOLD", "AVOID"
+    confidence: float                    # 0-100
     rationale: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     details: Dict[str, Any] = field(default_factory=dict)
+    risk: RiskMetrics = field(default_factory=RiskMetrics)
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
 class DecisionEngine:
@@ -141,7 +161,27 @@ class DecisionEngine:
         rationale.extend(vol_msgs)
         warnings.extend(vol_warns)
 
-        # --- 5. Diagnostics gate ------------------------------------------
+        # --- 5. Market regime detection -----------------------------------
+        regime = self._detect_regime(df)
+        details["market_regime"] = regime
+        if regime == "high_volatility":
+            score -= 5
+            warnings.append("Market regime: high volatility environment")
+        elif regime == "trending_up":
+            score += 5
+            rationale.append("Market regime: trending up")
+        elif regime == "trending_down":
+            score -= 5
+            rationale.append("Market regime: trending down")
+
+        # --- 6. Conflicting signals check ---------------------------------
+        conflict_penalty, conflict_msgs = self._check_conflicting_signals(
+            cum_return, trend_score, vol_score, spread,
+        )
+        score += conflict_penalty
+        warnings.extend(conflict_msgs)
+
+        # --- 7. Diagnostics gate ------------------------------------------
         if diagnostics_verdict:
             details["diagnostics_verdict"] = diagnostics_verdict
             if diagnostics_verdict.lower() == "healthy":
@@ -170,13 +210,136 @@ class DecisionEngine:
         else:
             action = "HOLD"
 
+        # --- Risk metrics -------------------------------------------------
+        risk = self._compute_risk_metrics(
+            returns_quantiles, h, lo_idx, median_idx, hi_idx, df,
+        )
+
         return Recommendation(
             action=action,
             confidence=score,
             rationale=rationale,
             warnings=warnings,
             details=details,
+            risk=risk,
         )
+
+    # ------------------------------------------------------------------
+    # Risk metrics
+    # ------------------------------------------------------------------
+    def _compute_risk_metrics(
+        self,
+        returns_q: np.ndarray,
+        horizon: int,
+        lo_idx: int,
+        med_idx: int,
+        hi_idx: int,
+        df: pd.DataFrame,
+    ) -> RiskMetrics:
+        """Compute stop-loss, take-profit, and related risk metrics."""
+        cum_lo = float(np.sum(returns_q[:horizon, lo_idx]))
+        cum_hi = float(np.sum(returns_q[:horizon, hi_idx]))
+
+        # Stop-loss: pessimistic scenario with a buffer
+        stop_loss = cum_lo * 1.2 if cum_lo < 0 else cum_lo - 0.005
+        stop_loss = min(stop_loss, -0.002)  # at least -0.2 %
+
+        # Take-profit: optimistic scenario with conservative trim
+        take_profit = cum_hi * 0.8 if cum_hi > 0 else cum_hi + 0.005
+        take_profit = max(take_profit, 0.002)
+
+        # Risk-reward ratio
+        risk_reward = (
+            abs(take_profit / stop_loss) if abs(stop_loss) > 1e-8 else 0.0
+        )
+
+        # Max drawdown from the pessimistic price path
+        cum_rets_lo = np.cumsum(returns_q[:horizon, lo_idx])
+        running_max = np.maximum.accumulate(1.0 + cum_rets_lo)
+        drawdowns = (1.0 + cum_rets_lo) / running_max - 1.0
+        max_dd = float(np.min(drawdowns)) if len(drawdowns) > 0 else 0.0
+
+        # Volatility regime from recent ATR%
+        vol_regime = "normal"
+        if not df.empty and "atr_pct" in df.columns:
+            recent_atr = float(df["atr_pct"].iloc[-1])
+            if recent_atr <= self.max_volatility * 0.7:
+                vol_regime = "low"
+            elif recent_atr > self.max_volatility * 1.3:
+                vol_regime = "high"
+
+        return RiskMetrics(
+            stop_loss_pct=round(stop_loss * 100, 2),
+            take_profit_pct=round(take_profit * 100, 2),
+            risk_reward_ratio=round(risk_reward, 2),
+            max_drawdown_pct=round(max_dd * 100, 2),
+            volatility_regime=vol_regime,
+        )
+
+    # ------------------------------------------------------------------
+    # Market regime detection
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _detect_regime(df: pd.DataFrame) -> str:
+        """Classify market regime from recent price data.
+
+        Returns one of: ``"trending_up"``, ``"trending_down"``,
+        ``"ranging"``, ``"high_volatility"``, ``"unknown"``.
+        """
+        if df.empty or len(df) < 20:
+            return "unknown"
+
+        close = df["Close"].values
+        tail = close[-20:]
+
+        x = np.arange(len(tail), dtype=float)
+        slope = float(np.polyfit(x, tail, 1)[0])
+        norm_slope = slope / float(np.mean(tail))
+
+        if "volatility_20" in df.columns:
+            vol = float(df["volatility_20"].iloc[-1])
+        else:
+            vol = float(np.std(np.diff(tail) / tail[:-1]))
+
+        if vol > 0.025:
+            return "high_volatility"
+        if norm_slope > 0.002:
+            return "trending_up"
+        if norm_slope < -0.002:
+            return "trending_down"
+        return "ranging"
+
+    # ------------------------------------------------------------------
+    # Conflicting signals
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _check_conflicting_signals(
+        cum_return: float,
+        trend_score: float,
+        vol_score: float,
+        spread: float,
+    ) -> tuple[float, List[str]]:
+        """Detect when forecast and technical signals contradict."""
+        msgs: List[str] = []
+        penalty = 0.0
+
+        if cum_return > 0.005 and trend_score < -10:
+            penalty -= 5
+            msgs.append(
+                "Conflicting signals: forecast is positive but trend is bearish"
+            )
+        if cum_return < -0.005 and trend_score > 10:
+            penalty -= 5
+            msgs.append(
+                "Conflicting signals: forecast is negative but trend is bullish"
+            )
+        if spread > 0.02 and abs(cum_return) > 0.01:
+            penalty -= 3
+            msgs.append(
+                "Wide uncertainty band despite a strong directional forecast"
+            )
+
+        return penalty, msgs
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -248,3 +411,43 @@ class DecisionEngine:
             warns.append(f"High volatility ({details_str})")
 
         return score, msgs, warns
+
+
+# ======================================================================
+# Recommendation history helper
+# ======================================================================
+
+class RecommendationHistory:
+    """In-memory history of recommendations for the current session."""
+
+    def __init__(self) -> None:
+        self._history: List[Dict[str, Any]] = []
+
+    def add(self, asset: str, reco: Recommendation) -> None:
+        """Record a recommendation."""
+        self._history.append({
+            "asset": asset,
+            "action": reco.action,
+            "confidence": reco.confidence,
+            "timestamp": reco.timestamp,
+            "risk": {
+                "stop_loss_pct": reco.risk.stop_loss_pct,
+                "take_profit_pct": reco.risk.take_profit_pct,
+                "risk_reward_ratio": reco.risk.risk_reward_ratio,
+                "max_drawdown_pct": reco.risk.max_drawdown_pct,
+                "volatility_regime": reco.risk.volatility_regime,
+            },
+            "details": reco.details,
+        })
+
+    def get_history(self, asset: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Return recommendations, optionally filtered by asset."""
+        if asset:
+            return [r for r in self._history if r["asset"] == asset]
+        return list(self._history)
+
+    def clear(self) -> None:
+        self._history.clear()
+
+    def __len__(self) -> int:
+        return len(self._history)

@@ -10,7 +10,8 @@ Supported assets: **GLD** (Gold ETF), **SLV** (Silver ETF), **BTC-USD**
 (Bitcoin), **PALL** (Palladium ETF).
 
 A fully internationalised **Streamlit** GUI (English / Spanish) lets you
-explore data, train models, visualise fan-chart forecasts, get recommendations,
+explore data, train models, visualise fan-chart forecasts, get recommendations
+with risk metrics, compare assets side-by-side for a given investment amount,
 evaluate performance, and follow a built-in tutorial — all from the browser.
 
 ---
@@ -27,8 +28,15 @@ evaluate performance, and follow a built-in tutorial — all from the browser.
 | **Decision engine** | Converts trajectories into BUY / HOLD / AVOID recommendations with confidence scores |
 | **Fine-tuning** | Resume training from a saved model checkpoint |
 | **30+ features** | Expanded technical indicators including ATR%, price-to-SMA ratios, and more |
-| **6-tab Streamlit GUI** | Data · Train · Forecast · Recommendation · Evaluation · Tutorial |
-| **78 pytest tests** | Comprehensive coverage across 8 test modules including integration smoke tests |
+| **7-tab Streamlit GUI** | Data · Train · Forecast · Recommendation · Evaluation · Compare · Tutorial |
+| **Asset model assignment** | Assign a primary model to each asset for one-click comparison |
+| **Portfolio comparison** | Compare multiple assets side-by-side given an investment amount — ranked leaderboard |
+| **Risk metrics** | Stop-loss, take-profit, risk-reward ratio, max drawdown, volatility regime per recommendation |
+| **Market regime detection** | Automatic detection of trending-up / trending-down / ranging / high-volatility regimes |
+| **Recommendation history** | Session-scoped history of all recommendations with filtering |
+| **Conflicting-signal warnings** | Detects when forecast direction contradicts the trend regime |
+| **Asset catalog** | Centralised metadata (type, currency, volatility, descriptions) for every supported ticker |
+| **116 pytest tests** | Comprehensive coverage across 11 test modules including integration smoke tests |
 
 ---
 
@@ -42,12 +50,16 @@ evaluate performance, and follow a built-in tutorial — all from the browser.
   - Configurable forecast horizon and quantile levels
 - **Training Pipeline** — StandardScaler, temporal 80/20 split, Adam, pinball loss, fine-tuning
 - **Inference** — Multi-step price trajectories with uncertainty bands
-- **Decision Engine** — BUY / HOLD / AVOID recommendations with confidence scoring
+- **Decision Engine** — BUY / HOLD / AVOID recommendations with confidence scoring, risk metrics, and market regime detection
+- **Portfolio Comparison** — Compare multiple assets for a given investment amount with a ranked leaderboard
+- **Risk Metrics** — Stop-loss, take-profit, risk-reward ratio, max drawdown, and volatility regime per recommendation
+- **Asset Model Assignment** — Assign a primary trained model to each asset for streamlined comparison
+- **Recommendation History** — Session-scoped log of all recommendations with per-asset filtering
 - **Evaluation** — Trajectory metrics (MSE, RMSE, MAE, directional accuracy) + quantile calibration
 - **Model Registry** — Persistent save/load with scaler, metadata, and architecture info
 - **Diagnostics** — Automatic loss-curve analysis with verdict, suggestions, and **Apply Suggestions** button that auto-tunes hyperparameters
 - **Loss Chart Markers** — Best-epoch vertical line and overfitting zone shading on training plots
-- **Streamlit GUI** — 6 tabs, i18n EN/ES, interactive Plotly charts
+- **Streamlit GUI** — 7 tabs, i18n EN/ES, interactive Plotly charts
 
 ---
 
@@ -78,9 +90,10 @@ streamlit run app.py
 1. **📊 Data** — Load historical prices for GLD, SLV, BTC-USD, or PALL
 2. **🔧 Train** — Pick architecture (GRU / LSTM / TCN), forecast steps, quantiles, and hyperparameters → train or fine-tune
 3. **🔮 Forecast** — View fan-chart trajectories with P10/P50/P90 uncertainty bands
-4. **💡 Recommendation** — Get BUY / HOLD / AVOID decisions with confidence scores
+4. **💡 Recommendation** — Get BUY / HOLD / AVOID decisions with confidence, risk metrics, and regime detection
 5. **📉 Evaluation** — Trajectory metrics + quantile calibration analysis
-6. **📚 Tutorial** — Built-in guide covering architectures, forecasting, and interpretation
+6. **⚖️ Compare** — Compare multiple assets side-by-side for a given investment amount
+7. **📚 Tutorial** — Built-in guide covering architectures, forecasting, and interpretation
 
 ### CLI example
 
@@ -96,8 +109,10 @@ from gldpred.features import FeatureEngineering
 from gldpred.models import TCNForecaster
 from gldpred.training import ModelTrainer
 from gldpred.inference import TrajectoryPredictor
-from gldpred.decision import DecisionEngine
+from gldpred.decision import DecisionEngine, PortfolioComparator
 from gldpred.evaluation import ModelEvaluator
+from gldpred.registry import ModelRegistry, ModelAssignments
+from gldpred.config import ASSET_CATALOG
 
 # Load & engineer features
 loader = AssetDataLoader(ticker="GLD")
@@ -124,10 +139,11 @@ forecast = predictor.predict_trajectory(df, feature_names,
                                          seq_length=20, asset="GLD")
 print(forecast.dates, forecast.p50)  # median trajectory
 
-# Get recommendation
+# Get recommendation with risk metrics
 engine = DecisionEngine()
 rec = engine.recommend(forecast, df)
 print(rec.action, rec.confidence, rec.rationale)
+print(rec.risk.stop_loss_pct, rec.risk.take_profit_pct, rec.risk.volatility_regime)
 
 # Evaluate
 preds = trainer.predict(X)
@@ -152,8 +168,9 @@ gld-price-prediction-dl/
 ├── src/gldpred/                    # Main Python package
 │   ├── __init__.py                 # v3.0.0
 │   ├── config/
-│   │   └── __init__.py             # DataConfig, ModelConfig, TrainingConfig,
-│   │                               #   DecisionConfig, AppConfig, SUPPORTED_ASSETS
+│   │   ├── __init__.py             # DataConfig, ModelConfig, TrainingConfig,
+│   │   │                           #   DecisionConfig, AppConfig, SUPPORTED_ASSETS
+│   │   └── assets.py               # AssetInfo, ASSET_CATALOG (centralised metadata)
 │   ├── i18n/
 │   │   └── __init__.py             # STRINGS, LANGUAGES (EN / ES)
 │   ├── data/
@@ -171,12 +188,14 @@ gld-price-prediction-dl/
 │   ├── inference/
 │   │   └── predictor.py            # TrajectoryPredictor, TrajectoryForecast
 │   ├── registry/
-│   │   └── store.py                # ModelRegistry (save / load / list / delete)
+│   │   ├── store.py                # ModelRegistry (save / load / list / delete)
+│   │   └── assignments.py          # ModelAssignments (primary model per asset)
 │   ├── decision/
-│   │   └── engine.py               # DecisionEngine, Recommendation
+│   │   ├── engine.py               # DecisionEngine, Recommendation, RiskMetrics
+│   │   └── portfolio.py            # PortfolioComparator, AssetOutcome, ComparisonResult
 │   └── app/
 │       ├── plots.py                # Fan chart & loss chart helpers
-│       └── streamlit_app.py        # 6-tab Streamlit GUI
+│       └── streamlit_app.py        # 7-tab Streamlit GUI
 │
 ├── tests/
 │   ├── conftest.py                 # Shared fixtures & seeds
@@ -186,8 +205,11 @@ gld-price-prediction-dl/
 │   ├── test_integration.py         # End-to-end pipeline smoke tests (6 tests)
 │   ├── test_diagnostics.py         # Loss-curve analysis (7 tests)
 │   ├── test_features.py            # Feature engineering & sequences (7 tests)
-│   ├── test_registry.py            # ModelRegistry persistence (5 tests)
-│   └── test_decision.py            # DecisionEngine recommendations (9 tests)
+│   ├── test_registry.py            # ModelRegistry persistence (13 tests)
+│   ├── test_decision.py            # DecisionEngine recommendations (9 tests)
+│   ├── test_catalog.py             # Asset catalog & metadata (8 tests)
+│   ├── test_assignments.py         # Model assignments persistence (9 tests)
+│   └── test_portfolio.py           # Portfolio comparison & risk metrics (21 tests)
 │
 ├── scripts/
 │   └── example.py                  # CLI demo
@@ -233,8 +255,24 @@ The `DecisionEngine` converts forecast trajectories into actionable signals:
 Each recommendation includes:
 - **Confidence score** (0–100)
 - **Rationale** — human-readable explanation
-- **Warnings** — risk factors to consider
+- **Warnings** — risk factors to consider- **Risk metrics** — stop-loss %, take-profit %, risk-reward ratio, max drawdown %, volatility regime
+- **Market regime** — trending-up, trending-down, ranging, or high-volatility
+- **Conflicting-signal detection** — warns when the forecast direction contradicts the market trend
 
+### Portfolio Comparison
+
+The `PortfolioComparator` enables side-by-side comparison of multiple assets:
+
+1. Assign a primary model to each asset in the Train tab
+2. Set an investment amount and horizon in the Compare tab
+3. The engine forecasts each asset, ranks them by median PnL, and presents a leaderboard
+
+Each `AssetOutcome` includes projected values at P10/P50/P90, PnL, and a full recommendation.
+
+### Recommendation History
+
+All recommendations generated in a session are recorded in `RecommendationHistory`,
+filterable by asset, and clearable from the UI.
 ---
 
 ## Model Registry
@@ -313,7 +351,7 @@ The label is stored in metadata and displayed throughout the UI, making it easy 
 ## Testing
 
 ```bash
-# Run all 78 tests
+# Run all 116 tests
 pytest
 
 # Verbose output

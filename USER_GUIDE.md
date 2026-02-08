@@ -19,8 +19,9 @@
 8. [Recommendations: BUY / HOLD / AVOID](#8-recommendations-buy--hold--avoid)
 9. [Evaluation: Understanding the Metrics](#9-evaluation-understanding-the-metrics)
 10. [Model Registry: Saving & Loading Models](#10-model-registry-saving--loading-models)
-11. [Practical Examples & Common Scenarios](#11-practical-examples--common-scenarios)
-12. [Quick-Reference Cheat Sheet](#12-quick-reference-cheat-sheet)
+11. [Asset Comparison: Portfolio View](#11-asset-comparison-portfolio-view)
+12. [Practical Examples & Common Scenarios](#12-practical-examples--common-scenarios)
+13. [Quick-Reference Cheat Sheet](#13-quick-reference-cheat-sheet)
 
 ---
 
@@ -42,15 +43,16 @@ not just the expected future price path, but also the uncertainty around it.
 
 ### Workflow
 
-The app has **six tabs**, each representing a step in the workflow:
+The app has **seven tabs**, each representing a step in the workflow:
 
 | Tab | Purpose |
 |-----|---------|
 | **📊 Data** | Download and explore historical prices for any supported asset |
 | **🔧 Train** | Configure and train a neural network (new or fine-tune) |
 | **🔮 Forecast** | View fan-chart trajectories with P10/P50/P90 uncertainty bands |
-| **💡 Recommendation** | Get BUY / HOLD / AVOID decisions with confidence scores |
+| **💡 Recommendation** | Get BUY / HOLD / AVOID decisions with confidence, risk metrics, and regime detection |
 | **📉 Evaluation** | Trajectory metrics + quantile calibration analysis |
+| **⚖️ Compare** | Compare multiple assets side-by-side for a given investment amount |
 | **📚 Tutorial** | Built-in guide (this content is also in the app) |
 
 The **sidebar** on the left lets you select the asset, language, architecture,
@@ -525,6 +527,52 @@ The recommendation card shows:
 - **Warnings** — specific risk factors (e.g., "High ATR% volatility",
   "Model diagnostics indicate overfitting")
 
+### Risk Metrics
+
+Every recommendation now includes a **Risk Metrics** panel:
+
+| Metric | Meaning |
+|--------|---------|
+| **Stop-Loss %** | Suggested stop-loss distance based on P10 downside. Always negative |
+| **Take-Profit %** | Suggested take-profit target based on P90 upside. Always positive |
+| **Risk-Reward Ratio** | Take-profit / |stop-loss|. Values above 1.0 are favourable |
+| **Max Drawdown %** | Worst-case peak-to-trough drawdown along the P10 trajectory |
+| **Volatility Regime** | Current market regime label (see below) |
+
+### Market Regime Detection
+
+The decision engine automatically classifies the asset's market regime:
+
+| Regime | Condition | Typical Action |
+|--------|-----------|---------------|
+| **Trending Up** | SMA50 > SMA200 and short-term momentum positive | Supports BUY signals |
+| **Trending Down** | SMA50 < SMA200 and short-term momentum negative | Supports AVOID signals |
+| **Ranging** | SMAs close together, no clear trend | Favours HOLD |
+| **High Volatility** | ATR% above asset threshold | Warns of elevated risk |
+
+The regime label is displayed prominently in the recommendation card.
+
+### Conflicting-Signal Warnings
+
+The engine checks whether the **forecast direction** (positive or negative P50
+return) contradicts the **market regime**:
+
+- A positive forecast in a trending-down market triggers a warning
+- A negative forecast in a trending-up market triggers a warning
+
+These conflicting signals reduce the confidence score and add explicit
+warnings to the recommendation.
+
+### Recommendation History
+
+All recommendations generated during a session are automatically saved.
+The **Recommendation History** panel at the bottom of the Recommendation tab
+shows a chronological log:
+
+- Filter by asset ticker
+- View timestamp, action, confidence, and rationale for each entry
+- Clear the history with a single click
+
 ### Important Disclaimer
 
 The recommendation engine is a **decision-support tool**, not financial advice.
@@ -703,7 +751,75 @@ When you list or fine-tune models in the app, you see the **label** (e.g.,
 
 ---
 
-## 11. Practical Examples & Common Scenarios
+## 11. Asset Comparison: Portfolio View
+
+### What is the Compare tab?
+
+The **Compare tab** (⚖️) lets you evaluate multiple assets side-by-side for
+a given investment amount. Instead of manually switching between assets, the
+comparison engine runs all forecasts and ranks them automatically.
+
+### Prerequisites
+
+Before using the Compare tab, you need to:
+
+1. **Train a model** for each asset you want to compare
+2. **Assign a primary model** to each asset (in the Train tab, expand the
+   "Asset Model Assignment" section after training)
+
+Only assets with an assigned primary model appear in the comparison.
+
+### How it works
+
+1. **Set investment amount** — Enter how much you want to invest (e.g., $10,000)
+2. **Set horizon** — Choose how many forecast steps to compare (default: 20)
+3. **Click Compare** — The engine runs forecasts for every assigned asset
+
+For each asset, the engine:
+- Loads the assigned model and its scaler
+- Generates a trajectory forecast
+- Calculates the number of shares you could buy at the current price
+- Projects the portfolio value at P10 (pessimistic), P50 (median), and P90 (optimistic)
+- Computes the expected PnL (profit/loss)
+- Generates a full recommendation with risk metrics
+
+### Reading the Comparison Results
+
+**Leaderboard table** — Assets ranked by median PnL (best first):
+
+| Column | Meaning |
+|--------|---------|
+| Rank | Position based on expected median profit |
+| Asset | Ticker symbol |
+| Action | BUY / HOLD / AVOID recommendation for this asset |
+| Confidence | Recommendation confidence (0–100) |
+| Current Price | Latest closing price |
+| Shares | Number of shares the investment would buy |
+| Investment | Your input amount |
+| P10 Value | Pessimistic projected value |
+| P50 Value | Median projected value |
+| P90 Value | Optimistic projected value |
+| Median PnL | Expected profit or loss based on median forecast |
+
+**Per-asset detail expanders** — Expand each asset for:
+- Full recommendation rationale and warnings
+- Risk metrics (stop-loss, take-profit, risk-reward ratio, drawdown)
+- Volatility regime label
+
+### Asset Model Assignment
+
+In the Train tab, after training a model:
+
+1. Expand the **"Asset Model Assignment"** section
+2. Select a model from the dropdown
+3. Click **"Assign as Primary"** to make it the default model for that asset
+4. The assigned model will be used whenever you run a comparison
+
+You can also **unassign** a model to remove it from comparison.
+
+---
+
+## 12. Practical Examples & Common Scenarios
 
 > **Note:** These examples are purely educational illustrations. They do NOT
 > constitute financial advice.
@@ -784,7 +900,7 @@ will improve its calibration with more data or longer training.
 
 ---
 
-## 12. Quick-Reference Cheat Sheet
+## 13. Quick-Reference Cheat Sheet
 
 ### Recommended starting configuration
 

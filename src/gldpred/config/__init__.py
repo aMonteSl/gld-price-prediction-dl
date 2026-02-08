@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Tuple
 
+from gldpred.config.assets import ASSET_CATALOG, AssetInfo, get_asset_info, supported_tickers
+
 SUPPORTED_ASSETS = ("GLD", "SLV", "BTC-USD", "PALL")
 
 

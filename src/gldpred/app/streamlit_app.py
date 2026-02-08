@@ -1,6 +1,7 @@
 """Streamlit GUI — Multi-Asset Price Prediction with Deep Learning.
 
-Six tabs: Data · Train · Forecast · Recommendation · Evaluation · Tutorial.
+Seven tabs: Data · Train · Forecast · Recommendation · Evaluation ·
+Compare · Tutorial.
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ import torch
 
 from gldpred.app.plots import create_fan_chart, create_loss_chart
 from gldpred.config import (
+    ASSET_CATALOG,
     SUPPORTED_ASSETS,
     AppConfig,
     DecisionConfig,
@@ -22,14 +24,20 @@ from gldpred.config import (
     TrainingConfig,
 )
 from gldpred.data import AssetDataLoader
-from gldpred.decision import DecisionEngine, Recommendation
+from gldpred.decision import (
+    DecisionEngine,
+    PortfolioComparator,
+    Recommendation,
+    RecommendationHistory,
+    RiskMetrics,
+)
 from gldpred.diagnostics import DiagnosticsAnalyzer
 from gldpred.evaluation import ModelEvaluator
 from gldpred.features import FeatureEngineering
 from gldpred.i18n import LANGUAGES, STRINGS
 from gldpred.inference import TrajectoryPredictor
 from gldpred.models import GRUForecaster, LSTMForecaster, TCNForecaster
-from gldpred.registry import ModelRegistry
+from gldpred.registry import ModelAssignments, ModelRegistry
 from gldpred.training import ModelTrainer
 
 # ── Architecture lookup ──────────────────────────────────────────────────
@@ -75,6 +83,7 @@ def main() -> None:
         t["tab_forecast"],
         t["tab_recommendation"],
         t["tab_evaluation"],
+        t["tab_compare"],
         t["tab_tutorial"],
     ])
 
@@ -89,6 +98,8 @@ def main() -> None:
     with tabs[4]:
         _tab_evaluation()
     with tabs[5]:
+        _tab_compare()
+    with tabs[6]:
         _tab_tutorial()
 
 
@@ -475,10 +486,63 @@ def _tab_train() -> None:
     # Show diagnostics
     _show_diagnostics()
 
+    # Asset model assignment section
+    st.divider()
+    _show_asset_assignment()
+
     # Registry management section
     st.divider()
     with st.expander(t["registry_delete_header"]):
         _show_registry_deletion()
+
+
+def _show_asset_assignment() -> None:
+    """Show controls to assign a model as the primary for this asset."""
+    t = _t()
+    asset = st.session_state.get("asset", "GLD")
+    registry = ModelRegistry()
+    assignments = ModelAssignments()
+
+    saved = registry.list_models(asset=asset)
+    if not saved:
+        return
+
+    with st.expander(t["assign_header"]):
+        current_id = assignments.get(asset)
+        if current_id:
+            # Find label of current assignment
+            label = current_id
+            for m in saved:
+                if m["model_id"] == current_id:
+                    label = m.get("label", current_id)
+                    break
+            st.success(f"{t['assign_current']}: **{label}**")
+
+            if st.button(t["assign_unassign_btn"], key="btn_unassign"):
+                assignments.unassign(asset)
+                st.success(t["assign_removed"].format(asset=asset))
+                st.rerun()
+        else:
+            st.info(t["assign_none"])
+
+        # Select model to assign
+        labels = [
+            f"{m.get('label', m['model_id'])} — "
+            f"{m.get('created_at', '?')[:16]}"
+            for m in saved
+        ]
+        choice = st.selectbox(
+            t["assign_header"], labels,
+            key="assign_model_select",
+        )
+        idx = labels.index(choice)
+        model_id = saved[idx]["model_id"]
+        model_label = saved[idx].get("label", model_id)
+
+        if st.button(t["assign_btn"], key="btn_assign"):
+            assignments.assign(asset, model_id)
+            st.success(t["assign_success"].format(asset=asset, label=model_label))
+            st.rerun()
 
 
 def _show_diagnostics() -> None:
@@ -781,7 +845,12 @@ def _tab_recommendation() -> None:
             diagnostics_verdict=verdict_str,
         )
 
-        # Display
+        # Record in history
+        if "reco_history" not in st.session_state:
+            st.session_state["reco_history"] = RecommendationHistory()
+        st.session_state["reco_history"].add(asset, reco)
+
+        # Display action and confidence
         action_label = {
             "BUY": t["reco_buy"],
             "HOLD": t["reco_hold"],
@@ -792,6 +861,37 @@ def _tab_recommendation() -> None:
         col1.markdown(f"### {t['reco_action']}: {action_label.get(reco.action, reco.action)}")
         col2.metric(t["reco_confidence"], f"{reco.confidence:.0f} / 100")
 
+        # Market regime
+        regime_map = {
+            "trending_up": t["regime_trending_up"],
+            "trending_down": t["regime_trending_down"],
+            "ranging": t["regime_ranging"],
+            "high_volatility": t["regime_high_volatility"],
+            "unknown": t["regime_unknown"],
+        }
+        regime = reco.details.get("market_regime", "unknown")
+        st.markdown(f"**{t['regime_header']}:** {regime_map.get(regime, regime)}")
+
+        # Risk metrics
+        st.subheader(t["risk_header"])
+        risk = reco.risk
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        rc1.metric(t["risk_stop_loss"], f"{risk.stop_loss_pct:+.2f}%")
+        rc2.metric(t["risk_take_profit"], f"{risk.take_profit_pct:+.2f}%")
+        rc3.metric(t["risk_reward_ratio"], f"{risk.risk_reward_ratio:.2f}")
+        rc4.metric(t["risk_max_drawdown"], f"{risk.max_drawdown_pct:.2f}%")
+
+        vol_regime_map = {
+            "low": t["risk_regime_low"],
+            "normal": t["risk_regime_normal"],
+            "high": t["risk_regime_high"],
+        }
+        st.markdown(
+            f"**{t['risk_volatility_regime']}:** "
+            f"{vol_regime_map.get(risk.volatility_regime, risk.volatility_regime)}"
+        )
+
+        # Rationale and warnings
         if reco.rationale:
             st.markdown(f"**{t['reco_rationale']}**")
             for r in reco.rationale:
@@ -802,9 +902,40 @@ def _tab_recommendation() -> None:
             for w in reco.warnings:
                 st.warning(w)
 
+        # Recommendation history
+        _show_recommendation_history()
+
     except Exception as exc:
         st.error(t["reco_error"].format(err=exc))
         st.code(traceback.format_exc())
+
+
+def _show_recommendation_history() -> None:
+    """Display the in-session recommendation history."""
+    t = _t()
+    history: RecommendationHistory | None = st.session_state.get("reco_history")
+    if not history or len(history) == 0:
+        return
+
+    with st.expander(t["reco_history_header"]):
+        records = history.get_history()
+        if not records:
+            st.info(t["reco_history_empty"])
+            return
+
+        rows = []
+        for rec in reversed(records):  # most recent first
+            rows.append({
+                t["compare_asset"]: rec["asset"],
+                t["compare_action"]: rec["action"],
+                t["compare_confidence"]: f"{rec['confidence']:.0f}",
+                "Timestamp": rec["timestamp"][:19],
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+        if st.button(t["reco_history_clear"], key="btn_clear_history"):
+            history.clear()
+            st.rerun()
 
 
 # ======================================================================
@@ -885,7 +1016,190 @@ def _tab_evaluation() -> None:
 
 
 # ======================================================================
-# TAB 6 — TUTORIAL
+# TAB 6 — COMPARE
+# ======================================================================
+def _tab_compare() -> None:
+    t = _t()
+    st.header(t["compare_header"])
+    st.info(t["compare_info"])
+
+    assignments = ModelAssignments()
+    registry = ModelRegistry()
+    all_assignments = assignments.get_all()
+
+    if not all_assignments:
+        st.warning(t["compare_no_models"])
+        return
+
+    # Controls
+    c1, c2 = st.columns(2)
+    investment = c1.number_input(
+        t["compare_investment"], min_value=100.0, max_value=1_000_000.0,
+        value=1000.0, step=100.0, key="compare_investment",
+    )
+    horizon = c2.slider(
+        t["compare_horizon"], 1, 60, 5, key="compare_horizon",
+    )
+
+    # Show which assets have assignments
+    assigned_tickers = list(all_assignments.keys())
+    st.markdown(
+        f"**Assets with primary models:** "
+        f"{', '.join(assigned_tickers)} ({len(assigned_tickers)})"
+    )
+
+    if not st.button(t["compare_btn"], key="btn_compare"):
+        # Show previous result if available
+        prev_result = st.session_state.get("compare_result")
+        if prev_result:
+            _render_comparison(prev_result)
+        return
+
+    try:
+        with st.spinner(t["compare_spinner"]):
+            forecasts: Dict[str, Any] = {}
+            dfs: Dict[str, pd.DataFrame] = {}
+            diagnostics_verdicts: Dict[str, str] = {}
+            max_vols: Dict[str, float] = {}
+
+            for ticker, model_id in all_assignments.items():
+                # Load data
+                loader = AssetDataLoader(ticker=ticker)
+                df = loader.load_data()
+                daily_ret = loader.daily_returns()
+
+                eng = FeatureEngineering()
+                df = eng.add_technical_indicators(df)
+                feat_df = eng.select_features(df)
+                feature_names = feat_df.columns.tolist()
+
+                # Load model from registry
+                saved = registry.list_models()
+                meta = next(
+                    (m for m in saved if m["model_id"] == model_id), None,
+                )
+                if meta is None:
+                    continue
+
+                arch = meta.get("architecture", "TCN")
+                cfg = meta.get("config", {})
+                model_cls = _ARCH_MAP.get(arch, TCNForecaster)
+
+                model, scaler, _m = registry.load_model(
+                    model_id,
+                    model_cls,
+                    input_size=len(feature_names),
+                    hidden_size=cfg.get("hidden_size", 64),
+                    num_layers=cfg.get("num_layers", 2),
+                    forecast_steps=cfg.get("forecast_steps", 20),
+                    quantiles=tuple(cfg.get("quantiles", [0.1, 0.5, 0.9])),
+                )
+
+                quantiles = tuple(cfg.get("quantiles", [0.1, 0.5, 0.9]))
+                trainer = ModelTrainer(model, quantiles=quantiles, device="cpu")
+                trainer.scaler = scaler
+
+                seq_length = cfg.get("seq_length", 20)
+                predictor = TrajectoryPredictor(trainer)
+                forecast = predictor.predict_trajectory(
+                    df, feature_names, seq_length, ticker,
+                )
+
+                forecasts[ticker] = forecast
+                dfs[ticker] = df
+
+                # Get diagnostics verdict from training summary
+                ts = meta.get("training_summary", {})
+                diagnostics_verdicts[ticker] = ts.get("diagnostics_verdict", "")
+
+                # Asset-specific volatility
+                if ticker in ASSET_CATALOG:
+                    max_vols[ticker] = ASSET_CATALOG[ticker].max_volatility
+                else:
+                    max_vols[ticker] = 0.02
+
+            # Run comparison
+            comparator = PortfolioComparator(
+                horizon_days=horizon,
+            )
+            result = comparator.compare(
+                forecasts=forecasts,
+                dfs=dfs,
+                investment=investment,
+                diagnostics_verdicts=diagnostics_verdicts,
+                max_volatilities=max_vols,
+            )
+
+            st.session_state["compare_result"] = result
+
+        _render_comparison(result)
+
+    except Exception as exc:
+        st.error(t["compare_error"].format(err=exc))
+        st.code(traceback.format_exc())
+
+
+def _render_comparison(result) -> None:
+    """Render comparison results."""
+    t = _t()
+
+    if not result.outcomes:
+        st.warning(t["compare_no_models"])
+        return
+
+    # Best asset banner
+    best = result.outcomes[0]
+    action_label = {
+        "BUY": t["reco_buy"],
+        "HOLD": t["reco_hold"],
+        "AVOID": t["reco_avoid"],
+    }
+    st.markdown(
+        f"### {t['compare_best_asset']}: **{best.ticker}** — "
+        f"{action_label.get(best.recommendation.action, best.recommendation.action)} "
+        f"({best.recommendation.confidence:.0f}/100)"
+    )
+
+    # Leaderboard table
+    st.subheader(t["compare_leaderboard"])
+    rows = []
+    for o in result.outcomes:
+        rows.append({
+            t["compare_rank"]: o.rank,
+            t["compare_asset"]: o.ticker,
+            t["compare_action"]: action_label.get(o.recommendation.action, o.recommendation.action),
+            t["compare_confidence"]: f"{o.recommendation.confidence:.0f}",
+            t["compare_pnl_p50"]: f"${o.pnl_p50:+,.2f}",
+            t["compare_pnl_pct"]: f"{o.pnl_pct_p50:+.2f}%",
+            t["compare_value_p10"]: f"${o.projected_value_p10:,.2f}",
+            t["compare_value_p50"]: f"${o.projected_value_p50:,.2f}",
+            t["compare_value_p90"]: f"${o.projected_value_p90:,.2f}",
+        })
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    # Detailed per-asset expanders
+    for o in result.outcomes:
+        with st.expander(t["compare_outcome_header"].format(asset=o.ticker)):
+            cc1, cc2, cc3 = st.columns(3)
+            cc1.metric(t["compare_current_price"], f"${o.current_price:,.2f}")
+            cc2.metric(t["compare_shares"], f"{o.shares:.4f}")
+            cc3.metric(t["compare_pnl_p50"], f"${o.pnl_p50:+,.2f}")
+
+            # Risk metrics for this asset
+            risk = o.recommendation.risk
+            rr1, rr2, rr3 = st.columns(3)
+            rr1.metric(t["risk_stop_loss"], f"{risk.stop_loss_pct:+.2f}%")
+            rr2.metric(t["risk_take_profit"], f"{risk.take_profit_pct:+.2f}%")
+            rr3.metric(t["risk_reward_ratio"], f"{risk.risk_reward_ratio:.2f}")
+
+            # Rationale summary
+            if o.recommendation.rationale:
+                for r in o.recommendation.rationale[:3]:
+                    st.markdown(f"- {r}")
+
+
+# ======================================================================
+# TAB 7 — TUTORIAL
 # ======================================================================
 def _tab_tutorial() -> None:
     t = _t()

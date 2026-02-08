@@ -22,11 +22,16 @@ forecast steps (default 20) and `Q` is the number of quantiles (default
 `(0.1, 0.5, 0.9)`). Training is driven by **pinball (quantile) loss**.
 
 A **decision engine** converts forecast trajectories into actionable
-**BUY / HOLD / AVOID** recommendations with confidence scores.
+**BUY / HOLD / AVOID** recommendations with confidence scores, **risk
+metrics** (stop-loss, take-profit, risk-reward ratio, max drawdown), and
+**market regime detection**.
+
+A **portfolio comparison engine** ranks multiple assets side-by-side for a
+given investment amount, producing a leaderboard of expected outcomes.
 
 A **Streamlit** GUI provides interactive data exploration, training,
-forecasting, recommendation, evaluation, and a built-in tutorial — all
-fully internationalised in **English and Spanish**.
+forecasting, recommendation, evaluation, asset comparison, and a built-in
+tutorial — all fully internationalised in **English and Spanish**.
 
 ---
 
@@ -46,8 +51,9 @@ gld-price-prediction-dl/
 │   ├── __init__.py               # Package root (version, public API) — v3.0.0
 │   │
 │   ├── config/
-│   │   └── __init__.py           # DataConfig, ModelConfig, TrainingConfig,
-│   │                             #   DecisionConfig, AppConfig, SUPPORTED_ASSETS
+│   │   ├── __init__.py           # DataConfig, ModelConfig, TrainingConfig,
+│   │   │                         #   DecisionConfig, AppConfig, SUPPORTED_ASSETS
+│   │   └── assets.py             # AssetInfo, ASSET_CATALOG (centralised metadata)
 │   │
 │   ├── i18n/
 │   │   └── __init__.py           # STRINGS, LANGUAGES (EN / ES)
@@ -82,16 +88,19 @@ gld-price-prediction-dl/
 │   │
 │   ├── registry/
 │   │   ├── __init__.py
-│   │   └── store.py              # ModelRegistry (save / load / list / delete)
+│   │   ├── store.py              # ModelRegistry (save / load / list / delete)
+│   │   └── assignments.py        # ModelAssignments (primary model per asset)
 │   │
 │   ├── decision/
 │   │   ├── __init__.py
-│   │   └── engine.py             # DecisionEngine, Recommendation (BUY/HOLD/AVOID)
+│   │   ├── engine.py             # DecisionEngine, Recommendation, RiskMetrics,
+│   │   │                         #   RecommendationHistory (BUY/HOLD/AVOID)
+│   │   └── portfolio.py          # PortfolioComparator, AssetOutcome, ComparisonResult
 │   │
 │   └── app/
 │       ├── __init__.py
 │       ├── plots.py              # Fan chart & loss chart plot helpers
-│       └── streamlit_app.py      # 6-tab Streamlit GUI
+│       └── streamlit_app.py      # 7-tab Streamlit GUI
 │
 ├── scripts/
 │   └── example.py                # CLI example script
@@ -104,7 +113,10 @@ gld-price-prediction-dl/
 │   ├── test_diagnostics.py       # Loss-curve analysis
 │   ├── test_features.py          # Feature engineering & sequences
 │   ├── test_registry.py          # ModelRegistry persistence
-│   └── test_decision.py          # DecisionEngine & Recommendation
+│   ├── test_decision.py          # DecisionEngine & Recommendation
+│   ├── test_catalog.py           # Asset catalog & metadata
+│   ├── test_assignments.py       # Model assignments persistence
+│   └── test_portfolio.py         # Portfolio comparison & risk metrics
 │
 └── data/model_registry/          # Saved model artifacts (git-ignored)
 ```
@@ -115,7 +127,7 @@ gld-price-prediction-dl/
 
 | Module | Key Export | Purpose |
 |--------|-----------|---------|
-| `gldpred.config` | `DataConfig`, `ModelConfig`, `TrainingConfig`, `DecisionConfig`, `AppConfig`, `SUPPORTED_ASSETS` | Typed configuration via `@dataclass` |
+| `gldpred.config` | `DataConfig`, `ModelConfig`, `TrainingConfig`, `DecisionConfig`, `AppConfig`, `SUPPORTED_ASSETS`, `ASSET_CATALOG`, `AssetInfo` | Typed configuration via `@dataclass` + asset metadata catalog |
 | `gldpred.data` | `AssetDataLoader` | Download & cache OHLCV data from asset inception to today for any supported ticker via yfinance |
 | `gldpred.features` | `FeatureEngineering` | Compute 30+ technical features (SMA, EMA, RSI, MACD, …); build multi-step sequences |
 | `gldpred.models` | `GRUForecaster`, `LSTMForecaster`, `TCNForecaster` | PyTorch `nn.Module` subclasses for quantile trajectory forecasting |
@@ -123,10 +135,10 @@ gld-price-prediction-dl/
 | `gldpred.evaluation` | `ModelEvaluator` | Trajectory metrics (`evaluate_trajectory`) and quantile calibration (`evaluate_quantiles`) |
 | `gldpred.inference` | `TrajectoryPredictor`, `TrajectoryForecast` | Price-path reconstruction from return forecasts + signal generation |
 | `gldpred.diagnostics` | `DiagnosticsAnalyzer` | Heuristic loss-curve analysis (verdict + suggestions) |
-| `gldpred.registry` | `ModelRegistry` | Persist, load, list, and delete trained model artifacts |
-| `gldpred.decision` | `DecisionEngine`, `Recommendation` | Convert forecast trajectories into BUY / HOLD / AVOID with confidence |
+| `gldpred.registry` | `ModelRegistry`, `ModelAssignments` | Persist, load, list, and delete trained model artifacts; assign primary model per asset |
+| `gldpred.decision` | `DecisionEngine`, `Recommendation`, `RiskMetrics`, `RecommendationHistory`, `PortfolioComparator` | Convert forecast trajectories into BUY / HOLD / AVOID with confidence, risk metrics, regime detection; portfolio comparison |
 | `gldpred.i18n` | `STRINGS`, `LANGUAGES` | Dictionary-based i18n (English / Spanish) |
-| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 6 tabs |
+| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 7 tabs |
 | `gldpred.app.plots` | `create_loss_chart`, `create_fan_chart` | Plotly chart helpers (loss chart with best-epoch markers, fan chart) |
 
 ### Model classes (all in `gldpred.models`)
@@ -262,7 +274,9 @@ These are strictly off-limits unless explicitly requested:
 ### Adding a new supported asset
 1. Add the ticker string to the `SUPPORTED_ASSETS` tuple in
    `config/__init__.py`.
-2. No further code changes needed — `AssetDataLoader` and the Streamlit
+2. Add an `AssetInfo` entry to `ASSET_CATALOG` in `config/assets.py`
+   (with descriptions in EN and ES).
+3. No further code changes needed — `AssetDataLoader` and the Streamlit
    sidebar dynamically read from `SUPPORTED_ASSETS`.
 
 ### Adding a new language
@@ -297,7 +311,7 @@ These are strictly off-limits unless explicitly requested:
 Run the test suite with:
 
 ```bash
-# pytest (62 tests across 7 files)
+# pytest (116 tests across 11 files)
 pytest
 pytest -v                       # verbose
 pytest tests/test_models.py     # single module
@@ -315,6 +329,9 @@ pytest tests/test_models.py     # single module
 | `tests/test_features.py` | Feature engineering, multi-step sequences |
 | `tests/test_registry.py` | ModelRegistry save, load, list, delete |
 | `tests/test_decision.py` | DecisionEngine recommendations & confidence |
+| `tests/test_catalog.py` | Asset catalog metadata, AssetInfo, ASSET_CATALOG |
+| `tests/test_assignments.py` | ModelAssignments persistence, assign/unassign |
+| `tests/test_portfolio.py` | RiskMetrics, regime detection, PortfolioComparator |
 | `tests/test_integration.py` | End-to-end pipeline smoke tests (all architectures) |
 
 When adding new functionality, add corresponding parametric tests.
@@ -341,3 +358,6 @@ reproducible seeds and synthetic data.
 | Old data loader class | Use `AssetDataLoader`, not the removed `GLDDataLoader` |
 | Diagnostics on short runs | `DiagnosticsAnalyzer` needs ≥ 4 epochs; fewer returns a "not enough data" verdict |
 | Hardcoding asset ticker | Always use `SUPPORTED_ASSETS` from `config`; never hardcode `"GLD"` |
+| Missing `AssetInfo` for new ticker | Every asset in `SUPPORTED_ASSETS` must have a matching entry in `ASSET_CATALOG` (`config/assets.py`) |
+| Ignoring `RiskMetrics` in tests | New decision-engine tests should verify `rec.risk` fields (stop_loss_pct, take_profit_pct, etc.) |
+| Skipping model assignment | The Compare tab requires at least one asset with an assigned primary model via `ModelAssignments` |

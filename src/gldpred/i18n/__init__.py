@@ -53,6 +53,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "tab_forecast": "📈 Forecast",
         "tab_recommendation": "🎯 Recommendation",
         "tab_evaluation": "📉 Evaluation",
+        "tab_compare": "⚖️ Compare",
         "tab_tutorial": "📚 Tutorial",
 
         # -- Tab 1: Data --------------------------------------------------
@@ -209,6 +210,67 @@ STRINGS: dict[str, dict[str, str]] = {
         "axis_price": "Price (USD)",
         "axis_returns": "Returns",
         "axis_day": "Day",
+
+        # -- Risk metrics --------------------------------------------------
+        "risk_header": "Risk Metrics",
+        "risk_stop_loss": "Stop-Loss",
+        "risk_take_profit": "Take-Profit",
+        "risk_reward_ratio": "Risk/Reward Ratio",
+        "risk_max_drawdown": "Max Drawdown",
+        "risk_volatility_regime": "Volatility Regime",
+        "risk_regime_low": "🟢 Low",
+        "risk_regime_normal": "🟡 Normal",
+        "risk_regime_high": "🔴 High",
+
+        # -- Market regime -------------------------------------------------
+        "regime_header": "Market Regime",
+        "regime_trending_up": "📈 Trending Up",
+        "regime_trending_down": "📉 Trending Down",
+        "regime_ranging": "↔️ Ranging",
+        "regime_high_volatility": "⚡ High Volatility",
+        "regime_unknown": "❓ Unknown",
+
+        # -- Asset assignment ----------------------------------------------
+        "assign_header": "Primary Model Assignment",
+        "assign_btn": "Set as Primary",
+        "assign_unassign_btn": "Unassign",
+        "assign_current": "Current primary model",
+        "assign_none": "No primary model assigned",
+        "assign_success": "Primary model for {asset} set to: {label}",
+        "assign_removed": "Primary model for {asset} removed.",
+
+        # -- Compare tab ---------------------------------------------------
+        "compare_header": "Multi-Asset Comparison",
+        "compare_info": (
+            "Compare projected outcomes across multiple assets with a "
+            "hypothetical investment. Each asset uses its primary model "
+            "from the registry. Load data and assign models first."
+        ),
+        "compare_investment": "Investment Amount ($)",
+        "compare_horizon": "Comparison Horizon (days)",
+        "compare_btn": "Run Comparison",
+        "compare_spinner": "Running forecasts for all assets…",
+        "compare_no_models": "No primary models assigned. Go to Train tab and assign models first.",
+        "compare_leaderboard": "Leaderboard",
+        "compare_rank": "Rank",
+        "compare_asset": "Asset",
+        "compare_action": "Signal",
+        "compare_confidence": "Confidence",
+        "compare_pnl_p50": "Median PnL",
+        "compare_pnl_pct": "Return %",
+        "compare_value_p10": "Value (P10)",
+        "compare_value_p50": "Value (P50)",
+        "compare_value_p90": "Value (P90)",
+        "compare_best_asset": "Best Opportunity",
+        "compare_error": "Comparison error: {err}",
+        "compare_outcome_header": "{asset} — Projected Outcome",
+        "compare_shares": "Shares",
+        "compare_current_price": "Current Price",
+
+        # -- Recommendation history ----------------------------------------
+        "reco_history_header": "Recommendation History",
+        "reco_history_empty": "No recommendations recorded yet.",
+        "reco_history_clear": "Clear History",
 
         # -- Tutorial ------------------------------------------------------
         "tut_header": "📚 Tutorial — How This Application Works",
@@ -461,6 +523,7 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "tab_forecast": "📈 Pronóstico",
         "tab_recommendation": "🎯 Recomendación",
         "tab_evaluation": "📉 Evaluación",
+        "tab_compare": "⚖️ Comparar",
         "tab_tutorial": "📚 Tutorial",
 
         # -- Tab 1: Data --------------------------------------------------
@@ -615,6 +678,67 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "axis_price": "Precio (USD)",
         "axis_returns": "Rendimientos",
         "axis_day": "Día",
+
+        # -- Risk metrics --------------------------------------------------
+        "risk_header": "Métricas de Riesgo",
+        "risk_stop_loss": "Stop-Loss",
+        "risk_take_profit": "Take-Profit",
+        "risk_reward_ratio": "Ratio Riesgo/Beneficio",
+        "risk_max_drawdown": "Drawdown Máximo",
+        "risk_volatility_regime": "Régimen de Volatilidad",
+        "risk_regime_low": "🟢 Baja",
+        "risk_regime_normal": "🟡 Normal",
+        "risk_regime_high": "🔴 Alta",
+
+        # -- Market regime -------------------------------------------------
+        "regime_header": "Régimen de Mercado",
+        "regime_trending_up": "📈 Tendencia Alcista",
+        "regime_trending_down": "📉 Tendencia Bajista",
+        "regime_ranging": "↔️ Lateral",
+        "regime_high_volatility": "⚡ Alta Volatilidad",
+        "regime_unknown": "❓ Desconocido",
+
+        # -- Asset assignment ----------------------------------------------
+        "assign_header": "Asignación de Modelo Primario",
+        "assign_btn": "Establecer como primario",
+        "assign_unassign_btn": "Desasignar",
+        "assign_current": "Modelo primario actual",
+        "assign_none": "Sin modelo primario asignado",
+        "assign_success": "Modelo primario de {asset} establecido: {label}",
+        "assign_removed": "Modelo primario de {asset} eliminado.",
+
+        # -- Compare tab ---------------------------------------------------
+        "compare_header": "Comparación Multi-Activo",
+        "compare_info": (
+            "Compare los resultados proyectados en varios activos con una "
+            "inversión hipotética. Cada activo usa su modelo primario del "
+            "registro. Cargue datos y asigne modelos primero."
+        ),
+        "compare_investment": "Monto de Inversión ($)",
+        "compare_horizon": "Horizonte de Comparación (días)",
+        "compare_btn": "Ejecutar Comparación",
+        "compare_spinner": "Ejecutando pronósticos para todos los activos…",
+        "compare_no_models": "No hay modelos primarios asignados. Vaya a Entrenar y asigne modelos primero.",
+        "compare_leaderboard": "Clasificación",
+        "compare_rank": "Posición",
+        "compare_asset": "Activo",
+        "compare_action": "Señal",
+        "compare_confidence": "Confianza",
+        "compare_pnl_p50": "PnL Mediana",
+        "compare_pnl_pct": "Retorno %",
+        "compare_value_p10": "Valor (P10)",
+        "compare_value_p50": "Valor (P50)",
+        "compare_value_p90": "Valor (P90)",
+        "compare_best_asset": "Mejor Oportunidad",
+        "compare_error": "Error de comparación: {err}",
+        "compare_outcome_header": "{asset} — Resultado Proyectado",
+        "compare_shares": "Acciones",
+        "compare_current_price": "Precio Actual",
+
+        # -- Recommendation history ----------------------------------------
+        "reco_history_header": "Historial de Recomendaciones",
+        "reco_history_empty": "Sin recomendaciones registradas aún.",
+        "reco_history_clear": "Limpiar Historial",
 
         # -- Tutorial ------------------------------------------------------
         "tut_header": "📚 Tutorial — Cómo funciona esta aplicación",
