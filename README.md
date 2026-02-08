@@ -28,13 +28,13 @@ evaluate performance, and follow a built-in tutorial — all from the browser.
 | **Fine-tuning** | Resume training from a saved model checkpoint |
 | **30+ features** | Expanded technical indicators including ATR%, price-to-SMA ratios, and more |
 | **6-tab Streamlit GUI** | Data · Train · Forecast · Recommendation · Evaluation · Tutorial |
-| **62 pytest tests** | Comprehensive coverage across 7 test modules |
+| **78 pytest tests** | Comprehensive coverage across 8 test modules including integration smoke tests |
 
 ---
 
 ## Features
 
-- **Data Loading** — OHLCV data for any supported asset via yfinance
+- **Data Loading** — Full history up to today for any supported asset via yfinance (end date is always today)
 - **Feature Engineering** — 30+ technical indicators (SMA, EMA, RSI, MACD, ATR, Bollinger, lags, …)
 - **Deep Learning Models**
   - **GRU** / **LSTM** / **TCN** (default) backbones
@@ -45,7 +45,8 @@ evaluate performance, and follow a built-in tutorial — all from the browser.
 - **Decision Engine** — BUY / HOLD / AVOID recommendations with confidence scoring
 - **Evaluation** — Trajectory metrics (MSE, RMSE, MAE, directional accuracy) + quantile calibration
 - **Model Registry** — Persistent save/load with scaler, metadata, and architecture info
-- **Diagnostics** — Automatic loss-curve analysis with verdict & suggestions
+- **Diagnostics** — Automatic loss-curve analysis with verdict, suggestions, and **Apply Suggestions** button that auto-tunes hyperparameters
+- **Loss Chart Markers** — Best-epoch vertical line and overfitting zone shading on training plots
 - **Streamlit GUI** — 6 tabs, i18n EN/ES, interactive Plotly charts
 
 ---
@@ -174,13 +175,15 @@ gld-price-prediction-dl/
 │   ├── decision/
 │   │   └── engine.py               # DecisionEngine, Recommendation
 │   └── app/
+│       ├── plots.py                # Fan chart & loss chart helpers
 │       └── streamlit_app.py        # 6-tab Streamlit GUI
 │
 ├── tests/
 │   ├── conftest.py                 # Shared fixtures & seeds
 │   ├── test_models.py              # 3 forecaster architectures (18 tests)
-│   ├── test_trainer.py             # Training loop, predict, save/load (9 tests)
+│   ├── test_trainer.py             # Training loop, predict, save/load (11 tests)
 │   ├── test_evaluator.py           # Trajectory & quantile metrics (7 tests)
+│   ├── test_integration.py         # End-to-end pipeline smoke tests (6 tests)
 │   ├── test_diagnostics.py         # Loss-curve analysis (7 tests)
 │   ├── test_features.py            # Feature engineering & sequences (7 tests)
 │   ├── test_registry.py            # ModelRegistry persistence (5 tests)
@@ -310,7 +313,7 @@ The label is stored in metadata and displayed throughout the UI, making it easy 
 ## Testing
 
 ```bash
-# Run all 70 tests
+# Run all 78 tests
 pytest
 
 # Verbose output

@@ -13,8 +13,8 @@ def _make_df(close=150.0, sma50=140.0, sma200=130.0, atr_pct=0.01):
     """Create a minimal DataFrame with the fields the engine expects."""
     return pd.DataFrame({
         "Close": [close],
-        "SMA_50": [sma50],
-        "SMA_200": [sma200],
+        "sma_50": [sma50],
+        "sma_200": [sma200],
         "atr_pct": [atr_pct],
     })
 

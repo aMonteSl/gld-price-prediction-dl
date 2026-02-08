@@ -190,13 +190,13 @@ class DecisionEngine:
 
         last = df.iloc[-1]
 
-        has_sma50 = "SMA_50" in df.columns
-        has_sma200 = "SMA_200" in df.columns
+        has_sma50 = "sma_50" in df.columns
+        has_sma200 = "sma_200" in df.columns
         close = float(last.get("Close", 0))
 
         if has_sma50 and has_sma200:
-            sma50 = float(last["SMA_50"])
-            sma200 = float(last["SMA_200"])
+            sma50 = float(last["sma_50"])
+            sma200 = float(last["sma_200"])
 
             above_sma200 = close > sma200
             golden_cross = sma50 > sma200
@@ -214,7 +214,7 @@ class DecisionEngine:
                 score -= 5
                 msgs.append("Mixed trend: price < SMA-200 but SMA-50 > SMA-200")
         elif has_sma200:
-            sma200 = float(last["SMA_200"])
+            sma200 = float(last["sma_200"])
             if close > sma200:
                 score += 10
                 msgs.append("Price above SMA-200")

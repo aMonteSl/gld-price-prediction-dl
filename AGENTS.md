@@ -90,6 +90,7 @@ gld-price-prediction-dl/
 │   │
 │   └── app/
 │       ├── __init__.py
+│       ├── plots.py              # Fan chart & loss chart plot helpers
 │       └── streamlit_app.py      # 6-tab Streamlit GUI
 │
 ├── scripts/
@@ -126,6 +127,7 @@ gld-price-prediction-dl/
 | `gldpred.decision` | `DecisionEngine`, `Recommendation` | Convert forecast trajectories into BUY / HOLD / AVOID with confidence |
 | `gldpred.i18n` | `STRINGS`, `LANGUAGES` | Dictionary-based i18n (English / Spanish) |
 | `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 6 tabs |
+| `gldpred.app.plots` | `create_loss_chart`, `create_fan_chart` | Plotly chart helpers (loss chart with best-epoch markers, fan chart) |
 
 ### Model classes (all in `gldpred.models`)
 
@@ -210,7 +212,7 @@ pip install -r requirements.txt
 # Run the Streamlit app
 streamlit run app.py
 
-# Run tests (pytest — 62 tests across 7 files)
+# Run tests (pytest — 78 tests across 8 files)
 pytest
 pytest -v                       # verbose
 pytest tests/test_models.py     # single module
@@ -313,6 +315,7 @@ pytest tests/test_models.py     # single module
 | `tests/test_features.py` | Feature engineering, multi-step sequences |
 | `tests/test_registry.py` | ModelRegistry save, load, list, delete |
 | `tests/test_decision.py` | DecisionEngine recommendations & confidence |
+| `tests/test_integration.py` | End-to-end pipeline smoke tests (all architectures) |
 
 When adding new functionality, add corresponding parametric tests.
 Tests should be self-contained and not require network access (mock yfinance

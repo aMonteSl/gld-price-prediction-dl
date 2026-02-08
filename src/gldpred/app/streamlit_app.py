@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import traceback
 from datetime import datetime, timedelta
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import torch
 
+from gldpred.app.plots import create_fan_chart, create_loss_chart
 from gldpred.config import (
     SUPPORTED_ASSETS,
     AppConfig,
@@ -39,7 +40,14 @@ _ARCH_MAP = {
     "LSTM": LSTMForecaster,
 }
 
+# ── Sidebar allowed values (used by Apply Suggestions) ───────────────────
+_HIDDEN_SIZE_OPTIONS: List[int] = [32, 64, 128]
+_BATCH_SIZE_OPTIONS: List[int] = [16, 32, 64, 128]
+_LR_OPTIONS: List[float] = [0.0001, 0.0005, 0.001, 0.005, 0.01]
+
 # ── i18n helper ──────────────────────────────────────────────────────────
+
+
 def _t() -> Dict[str, str]:
     lang = st.session_state.get("lang", "en")
     return STRINGS[lang]
@@ -103,51 +111,48 @@ def _sidebar() -> None:
         st.header(t["sidebar_config"])
 
         # ── Asset ────────────────────────────────────────────────────
-        asset = st.selectbox(
+        st.selectbox(
             t["sidebar_asset"],
             list(SUPPORTED_ASSETS),
             index=0,
+            key="asset",
         )
-        st.session_state["asset"] = asset
 
         # ── Data ─────────────────────────────────────────────────────
         st.subheader(t["sidebar_data_settings"])
-        default_end = datetime.now()
-        default_start = default_end - timedelta(days=365 * 5)
-        start_date = st.date_input(t["sidebar_start_date"], value=default_start)
-        end_date = st.date_input(t["sidebar_end_date"], value=default_end)
-        st.session_state["start_date"] = str(start_date)
-        st.session_state["end_date"] = str(end_date)
+        default_start = datetime.now() - timedelta(days=365 * 5)
+        st.date_input(
+            t["sidebar_start_date"], value=default_start, key="start_date",
+        )
+        st.caption(t["sidebar_end_date_auto"])
 
         # ── Model ────────────────────────────────────────────────────
         st.subheader(t["sidebar_model_settings"])
-        arch = st.selectbox(t["sidebar_model_arch"], ["TCN", "GRU", "LSTM"], index=0)
-        st.session_state["architecture"] = arch
-
-        forecast_steps = st.slider(t["sidebar_forecast_steps"], 5, 60, 20)
-        st.session_state["forecast_steps"] = forecast_steps
+        st.selectbox(
+            t["sidebar_model_arch"], ["TCN", "GRU", "LSTM"],
+            index=0, key="architecture",
+        )
+        st.slider(
+            t["sidebar_forecast_steps"], 5, 60, 20, key="forecast_steps",
+        )
 
         # ── Training ─────────────────────────────────────────────────
         st.subheader(t["sidebar_training_settings"])
-        seq_length = st.slider(t["sidebar_seq_length"], 10, 60, 20)
-        hidden_size = st.select_slider(t["sidebar_hidden_size"], [32, 64, 128], value=64)
-        num_layers = st.slider(t["sidebar_num_layers"], 1, 4, 2)
-        epochs = st.slider(t["sidebar_epochs"], 10, 200, 50)
-        batch_size = st.select_slider(t["sidebar_batch_size"], [16, 32, 64, 128], value=32)
-        lr = st.select_slider(
-            t["sidebar_learning_rate"],
-            [0.0001, 0.0005, 0.001, 0.005, 0.01],
-            value=0.001,
+        st.slider(t["sidebar_seq_length"], 10, 60, 20, key="seq_length")
+        st.select_slider(
+            t["sidebar_hidden_size"], _HIDDEN_SIZE_OPTIONS,
+            value=64, key="hidden_size",
         )
-
-        st.session_state.update({
-            "seq_length": seq_length,
-            "hidden_size": hidden_size,
-            "num_layers": num_layers,
-            "epochs": epochs,
-            "batch_size": batch_size,
-            "learning_rate": lr,
-        })
+        st.slider(t["sidebar_num_layers"], 1, 4, 2, key="num_layers")
+        st.slider(t["sidebar_epochs"], 10, 200, 50, key="epochs")
+        st.select_slider(
+            t["sidebar_batch_size"], _BATCH_SIZE_OPTIONS,
+            value=32, key="batch_size",
+        )
+        st.select_slider(
+            t["sidebar_learning_rate"], _LR_OPTIONS,
+            value=0.001, key="learning_rate",
+        )
 
         # ── About ────────────────────────────────────────────────────
         st.divider()
@@ -170,7 +175,6 @@ def _tab_data() -> None:
                 loader = AssetDataLoader(
                     ticker=asset,
                     start_date=st.session_state.get("start_date"),
-                    end_date=st.session_state.get("end_date"),
                 )
                 df = loader.load_data()
                 daily_ret = loader.daily_returns()
@@ -208,14 +212,14 @@ def _tab_data() -> None:
             x=df.index, y=df["Close"], mode="lines",
             name="Close", line=dict(color="#FFD700", width=2),
         ))
-        if "SMA_50" in df.columns:
+        if "sma_50" in df.columns:
             fig.add_trace(go.Scatter(
-                x=df.index, y=df["SMA_50"], mode="lines",
+                x=df.index, y=df["sma_50"], mode="lines",
                 name="SMA 50", line=dict(color="#1f77b4", width=1, dash="dash"),
             ))
-        if "SMA_200" in df.columns:
+        if "sma_200" in df.columns:
             fig.add_trace(go.Scatter(
-                x=df.index, y=df["SMA_200"], mode="lines",
+                x=df.index, y=df["sma_200"], mode="lines",
                 name="SMA 200", line=dict(color="#ff7f0e", width=1, dash="dash"),
             ))
         fig.update_layout(
@@ -239,17 +243,26 @@ def _tab_train() -> None:
     st.header(t["train_header"])
     st.info(t["train_info"])
 
+    # Show "suggestions applied" banner (set by Apply Suggestions)
+    if st.session_state.pop("suggestions_applied", False):
+        st.success(t["diag_applied_success"])
+
     df = st.session_state.get("raw_df")
     if df is None:
         st.warning(t["train_warn_no_data"])
         return
 
     # Training mode
-    mode = st.radio(t["train_mode"], [t["train_mode_new"], t["train_mode_finetune"]], horizontal=True)
+    mode = st.radio(
+        t["train_mode"],
+        [t["train_mode_new"], t["train_mode_finetune"]],
+        horizontal=True,
+    )
     is_finetune = mode == t["train_mode_finetune"]
 
     registry = ModelRegistry()
     selected_model_id: str | None = None
+    selected_meta: Dict[str, Any] | None = None
 
     if is_finetune:
         asset = st.session_state.get("asset", "GLD")
@@ -258,12 +271,15 @@ def _tab_train() -> None:
         if not saved:
             st.warning(t["registry_no_models"])
             return
-        labels = [f"{m.get('label', m['model_id'])} — {m.get('created_at', '?')[:16]}" for m in saved]
+        labels = [
+            f"{m.get('label', m['model_id'])} — "
+            f"{m.get('created_at', '?')[:16]}"
+            for m in saved
+        ]
         choice = st.selectbox(t["train_select_model"], labels)
-        selected_model_id = saved[labels.index(choice)]["model_id"]
-        epochs_label = t["train_finetune_epochs"]
-    else:
-        epochs_label = t["sidebar_epochs"]
+        idx = labels.index(choice)
+        selected_model_id = saved[idx]["model_id"]
+        selected_meta = saved[idx]
 
     # Custom model label input
     model_label = st.text_input(
@@ -275,10 +291,15 @@ def _tab_train() -> None:
 
     btn_label = t["train_finetune_btn"] if is_finetune else t["train_btn"]
     if not st.button(btn_label, key="btn_train"):
+        # Even when not training, show prior diagnostics if available
+        _show_diagnostics()
         return
 
     try:
         with st.spinner(t["train_spinner"]):
+            # ── Clear previous diagnostics state ──────────────────────
+            st.session_state["suggestions_applied"] = False
+
             asset = st.session_state.get("asset", "GLD")
             arch = st.session_state.get("architecture", "TCN")
             forecast_steps = st.session_state.get("forecast_steps", 20)
@@ -288,12 +309,34 @@ def _tab_train() -> None:
             epochs = st.session_state.get("epochs", 50)
             batch_size = st.session_state.get("batch_size", 32)
             lr = st.session_state.get("learning_rate", 0.001)
-            quantiles = (0.1, 0.5, 0.9)
+            quantiles: tuple[float, ...] = (0.1, 0.5, 0.9)
 
             daily_returns = st.session_state["daily_returns"]
-            feature_names = st.session_state["feature_names"]
+            feature_names: list[str] = st.session_state["feature_names"]
 
-            # Sequences
+            # ── For fine-tune: override with saved model config ───────
+            if is_finetune and selected_meta:
+                saved_cfg = selected_meta.get("config", {})
+                forecast_steps = saved_cfg.get("forecast_steps", forecast_steps)
+                seq_length = saved_cfg.get("seq_length", seq_length)
+                hidden_size = saved_cfg.get("hidden_size", hidden_size)
+                num_layers = saved_cfg.get("num_layers", num_layers)
+                quantiles = tuple(
+                    saved_cfg.get("quantiles", list(quantiles))
+                )
+
+                # Validate feature dimension match
+                saved_features = selected_meta.get("feature_names", [])
+                if saved_features and len(saved_features) != len(feature_names):
+                    st.error(
+                        t["train_feature_mismatch"].format(
+                            expected=len(saved_features),
+                            got=len(feature_names),
+                        )
+                    )
+                    return
+
+            # ── Create sequences ──────────────────────────────────────
             eng = FeatureEngineering()
             X, y = eng.create_sequences(
                 df[feature_names].values,
@@ -316,11 +359,15 @@ def _tab_train() -> None:
                     forecast_steps=forecast_steps,
                     quantiles=quantiles,
                 )
-                trainer = ModelTrainer(model, quantiles=quantiles, device=device)
-                train_loader, val_loader = trainer.prepare_data(
-                    X, y, test_size=0.2, batch_size=batch_size, refit_scaler=False,
+                trainer = ModelTrainer(
+                    model, quantiles=quantiles, device=device,
                 )
-                trainer.scaler = scaler
+                trainer.scaler = scaler          # BEFORE prepare_data
+                train_loader, val_loader = trainer.prepare_data(
+                    X, y,
+                    test_size=0.2, batch_size=batch_size,
+                    refit_scaler=False,
+                )
             else:
                 model = model_cls(
                     input_size=input_size,
@@ -329,7 +376,9 @@ def _tab_train() -> None:
                     forecast_steps=forecast_steps,
                     quantiles=quantiles,
                 )
-                trainer = ModelTrainer(model, quantiles=quantiles, device=device)
+                trainer = ModelTrainer(
+                    model, quantiles=quantiles, device=device,
+                )
                 train_loader, val_loader = trainer.prepare_data(
                     X, y, test_size=0.2, batch_size=batch_size,
                 )
@@ -356,19 +405,16 @@ def _tab_train() -> None:
             progress_bar.progress(1.0)
 
             # Diagnostics
-            diag = DiagnosticsAnalyzer()
-            diag_result = diag.analyze({
+            diag_result = DiagnosticsAnalyzer.analyze({
                 "train_loss": train_losses,
                 "val_loss": val_losses,
             })
 
             # Evaluation on val set
-            X_val_tensor = torch.tensor(
-                trainer.scaler.transform(X[int(len(X) * 0.8):].reshape(-1, X.shape[2])).reshape(-1, seq_length, X.shape[2]),
-                dtype=torch.float32,
-            )
-            y_val = y[int(len(y) * 0.8):]
-            pred_val = trainer.predict(X_val_tensor.numpy())
+            split = int(len(X) * 0.8)
+            X_val_raw = X[split:]
+            y_val = y[split:]
+            pred_val = trainer.predict(X_val_raw)
 
             evaluator = ModelEvaluator()
             median_idx = list(quantiles).index(0.5)
@@ -457,7 +503,7 @@ def _show_diagnostics() -> None:
 
     c1, c2, c3 = st.columns(3)
     c1.metric(t["diag_verdict"], v_label)
-    c2.metric(t["diag_best_epoch"], diag.best_epoch)
+    c2.metric(t["diag_best_epoch"], diag.best_epoch + 1)
     c3.metric(t["diag_gen_gap"], f"{diag.generalization_gap:.4f}")
 
     st.markdown(f"**{t['diag_explanation']}:** {diag.explanation}")
@@ -466,19 +512,85 @@ def _show_diagnostics() -> None:
         for s in diag.suggestions:
             st.markdown(f"- {s}")
 
-    # Loss curve
+    # ── "Apply Suggestions" button ────────────────────────────────────
+    if diag.verdict != "healthy":
+        already_applied = st.session_state.get("suggestions_applied", False)
+        if already_applied:
+            st.info(t["diag_applied_success"])
+        else:
+            if st.button(t["diag_apply_btn"], key="btn_apply_suggestions"):
+                _apply_suggestions(diag.verdict, diag.best_epoch)
+                st.session_state["suggestions_applied"] = True
+                st.rerun()
+
+    # ── Loss chart with markers ───────────────────────────────────────
     if train_losses and val_losses:
-        fig = go.Figure()
-        epochs_x = list(range(1, len(train_losses) + 1))
-        fig.add_trace(go.Scatter(x=epochs_x, y=train_losses, mode="lines", name="Train"))
-        fig.add_trace(go.Scatter(x=epochs_x, y=val_losses, mode="lines", name="Validation"))
-        fig.update_layout(
-            xaxis_title="Epoch",
-            yaxis_title="Loss",
-            template="plotly_dark",
-            height=350,
+        fig = create_loss_chart(
+            train_losses,
+            val_losses,
+            best_epoch=diag.best_epoch,
+            verdict=diag.verdict,
         )
         st.plotly_chart(fig, use_container_width=True)
+
+
+def _apply_suggestions(verdict: str, best_epoch: int) -> None:
+    """Update sidebar config controls based on diagnostics verdict.
+
+    Only produces values within the allowed slider/select-slider ranges so
+    that Streamlit widgets stay consistent after ``st.rerun()``.
+    """
+    ss = st.session_state
+
+    if verdict == "overfitting":
+        # Reduce epochs to best_epoch + small buffer
+        ss["epochs"] = min(max(best_epoch + 5, 10), 200)
+        # Step hidden_size down
+        _step_select(ss, "hidden_size", _HIDDEN_SIZE_OPTIONS, -1)
+        # Reduce layers
+        nl = ss.get("num_layers", 2)
+        if nl > 1:
+            ss["num_layers"] = nl - 1
+
+    elif verdict == "underfitting":
+        # More epochs
+        ss["epochs"] = min(ss.get("epochs", 50) + 50, 200)
+        # Step hidden_size up
+        _step_select(ss, "hidden_size", _HIDDEN_SIZE_OPTIONS, +1)
+        # More layers
+        nl = ss.get("num_layers", 2)
+        if nl < 4:
+            ss["num_layers"] = nl + 1
+        # Step LR up
+        _step_select(ss, "learning_rate", _LR_OPTIONS, +1)
+
+    elif verdict == "noisy":
+        # Step LR down
+        _step_select(ss, "learning_rate", _LR_OPTIONS, -1)
+        # Step batch_size up
+        _step_select(ss, "batch_size", _BATCH_SIZE_OPTIONS, +1)
+        # Increase sequence length
+        sl = ss.get("seq_length", 20)
+        ss["seq_length"] = min(sl + 10, 60)
+
+
+def _step_select(
+    ss: Any,
+    key: str,
+    options: list,
+    direction: int,
+) -> None:
+    """Step a select-slider value up (+1) or down (-1) within *options*."""
+    current = ss.get(key, options[len(options) // 2])
+    try:
+        idx = options.index(current)
+    except ValueError:
+        # Snap to the closest allowed value
+        idx = min(
+            range(len(options)), key=lambda i: abs(options[i] - current),
+        )
+    new_idx = max(0, min(len(options) - 1, idx + direction))
+    ss[key] = options[new_idx]
 
 
 def _show_registry_deletion() -> None:
@@ -578,7 +690,7 @@ def _tab_forecast() -> None:
     st.header(t["forecast_header"])
     st.info(t["forecast_info"])
 
-    trainer = st.session_state.get("trainer")
+    trainer: ModelTrainer | None = st.session_state.get("trainer")
     df = st.session_state.get("raw_df")
     if trainer is None or df is None:
         st.warning(t["forecast_warn_no_model"])
@@ -588,7 +700,7 @@ def _tab_forecast() -> None:
         asset = st.session_state.get("asset", "GLD")
         feature_names = st.session_state.get("feature_names", [])
         seq_length = st.session_state.get("seq_length", 20)
-        quantiles = tuple(trainer.quantiles.tolist())
+        quantiles = trainer.quantiles  # property → tuple
 
         predictor = TrajectoryPredictor(trainer)
         forecast = predictor.predict_trajectory(df, feature_names, seq_length, asset)
@@ -597,7 +709,12 @@ def _tab_forecast() -> None:
 
         # ── Fan chart ─────────────────────────────────────────────────
         st.subheader(t["forecast_fan_chart"])
-        _plot_fan_chart(df, forecast, t)
+        fig = create_fan_chart(
+            df, forecast,
+            x_label=t["axis_date"],
+            y_label=t["axis_price"],
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
         # ── Table ─────────────────────────────────────────────────────
         st.subheader(t["forecast_table"])
@@ -623,60 +740,6 @@ def _tab_forecast() -> None:
         st.error(t["forecast_error"].format(err=exc))
         st.code(traceback.format_exc())
 
-
-def _plot_fan_chart(df: pd.DataFrame, forecast: Any, t: Dict[str, str]) -> None:
-    """Plotly fan chart with historical tail + forecast bands."""
-    quantiles = forecast.quantiles
-    q_idx = {round(q, 2): i for i, q in enumerate(quantiles)}
-    lo_i = q_idx.get(0.1, 0)
-    med_i = q_idx.get(0.5, 1)
-    hi_i = q_idx.get(0.9, 2)
-
-    # Historical tail (last 60 days)
-    hist_tail = df["Close"].iloc[-60:]
-
-    # Forecast dates (include last known as starting anchor)
-    fc_dates = [forecast.last_date] + list(forecast.dates)
-    prices_med = forecast.price_paths[:, med_i]
-    prices_lo = forecast.price_paths[:, lo_i]
-    prices_hi = forecast.price_paths[:, hi_i]
-
-    fig = go.Figure()
-
-    # Historical
-    fig.add_trace(go.Scatter(
-        x=hist_tail.index, y=hist_tail.values,
-        mode="lines", name="Historical",
-        line=dict(color="#FFD700", width=2),
-    ))
-
-    # P10-P90 band
-    fig.add_trace(go.Scatter(
-        x=fc_dates, y=prices_hi.tolist(),
-        mode="lines", line=dict(width=0),
-        showlegend=False,
-    ))
-    fig.add_trace(go.Scatter(
-        x=fc_dates, y=prices_lo.tolist(),
-        mode="lines", line=dict(width=0),
-        fill="tonexty", fillcolor="rgba(255,215,0,0.15)",
-        name="P10–P90",
-    ))
-
-    # Median
-    fig.add_trace(go.Scatter(
-        x=fc_dates, y=prices_med.tolist(),
-        mode="lines+markers", name="P50 (Median)",
-        line=dict(color="#00BFFF", width=2),
-    ))
-
-    fig.update_layout(
-        xaxis_title=t["axis_date"],
-        yaxis_title=t["axis_price"],
-        template="plotly_dark",
-        height=500,
-    )
-    st.plotly_chart(fig, use_container_width=True)
 
 
 # ======================================================================
@@ -784,12 +847,32 @@ def _tab_evaluation() -> None:
         if quant:
             st.subheader(t["eval_quantile_metrics"])
             cov_cols = st.columns(3)
-            cov_cols[0].metric("P10 Coverage", f"{quant.get('q10_coverage', 0):.2%}")
-            cov_cols[1].metric("P50 Coverage", f"{quant.get('q50_coverage', 0):.2%}")
-            cov_cols[2].metric("P90 Coverage", f"{quant.get('q90_coverage', 0):.2%}")
+            cov_cols[0].metric(
+                "P10 Coverage",
+                f"{quant.get('q10_coverage', 0):.2%}",
+            )
+            cov_cols[1].metric(
+                "P50 Coverage",
+                f"{quant.get('q50_coverage', 0):.2%}",
+            )
+            cov_cols[2].metric(
+                "P90 Coverage",
+                f"{quant.get('q90_coverage', 0):.2%}",
+            )
 
-            st.metric("Mean Interval Width (P10–P90)", f"{quant.get('mean_interval_width', 0):.6f}")
-            st.metric("Calibration Error", f"{quant.get('calibration_error', 0):.4f}")
+            if "mean_interval_width" in quant:
+                st.metric(
+                    "Mean Interval Width (P10–P90)",
+                    f"{quant['mean_interval_width']:.6f}",
+                )
+
+            # Average calibration error across quantiles
+            cal_errs = [
+                quant.get(f"q{int(q * 100)}_cal_error", 0)
+                for q in (0.1, 0.5, 0.9)
+            ]
+            avg_cal = float(np.mean(cal_errs))
+            st.metric("Avg Calibration Error", f"{avg_cal:.4f}")
 
         # All metrics
         with st.expander(t["eval_detailed"]):

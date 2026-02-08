@@ -10,17 +10,17 @@ SUPPORTED_ASSETS = ("GLD", "SLV", "BTC-USD", "PALL")
 
 @dataclass
 class DataConfig:
-    """Configuration for data loading."""
+    """Configuration for data loading.
+
+    ``end_date`` is always *today* — it is not user-configurable.
+    """
 
     ticker: str = "GLD"
     start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
 
     def __post_init__(self) -> None:
-        if self.end_date is None:
-            self.end_date = datetime.now()
         if self.start_date is None:
-            self.start_date = self.end_date - timedelta(days=365 * 5)
+            self.start_date = datetime.now() - timedelta(days=365 * 5)
 
 
 @dataclass

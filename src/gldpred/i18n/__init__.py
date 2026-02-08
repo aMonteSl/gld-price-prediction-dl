@@ -28,7 +28,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "sidebar_asset": "Asset / Ticker",
         "sidebar_data_settings": "Data Settings",
         "sidebar_start_date": "Start Date",
-        "sidebar_end_date": "End Date",
+        "sidebar_end_date_auto": "End date: today (auto)",
         "sidebar_model_settings": "Model Settings",
         "sidebar_model_arch": "Architecture",
         "sidebar_forecast_steps": "Forecast Steps (K days)",
@@ -124,6 +124,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "diag_suggestions": "Suggestions",
         "diag_best_epoch": "Best Epoch",
         "diag_gen_gap": "Gen. Gap",
+        "diag_apply_btn": "✨ Apply Suggestions",
+        "diag_applied_success": "Suggestions applied — sidebar settings updated. Retrain to see the effect.",
+        "diag_loss_chart": "Loss Curve",
+
+        # -- Fine-tune validation -----------------------------------------
+        "train_feature_mismatch": (
+            "⚠️ Feature dimension mismatch: saved model expects {expected} "
+            "features but current data has {got}. Cannot fine-tune."
+        ),
 
         # -- Tab 3: Forecast ----------------------------------------------
         "forecast_header": "Forecast Trajectory",
@@ -427,7 +436,7 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "sidebar_asset": "Activo / Ticker",
         "sidebar_data_settings": "Datos",
         "sidebar_start_date": "Fecha de inicio",
-        "sidebar_end_date": "Fecha de fin",
+        "sidebar_end_date_auto": "Fecha de fin: hoy (auto)",
         "sidebar_model_settings": "Modelo",
         "sidebar_model_arch": "Arquitectura",
         "sidebar_forecast_steps": "Pasos de pronóstico (K días)",
@@ -521,6 +530,15 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "diag_suggestions": "Sugerencias",
         "diag_best_epoch": "Mejor época",
         "diag_gen_gap": "Brecha gen.",
+        "diag_apply_btn": "✨ Aplicar sugerencias",
+        "diag_applied_success": "Sugerencias aplicadas — configuración actualizada. Reentrene para ver el efecto.",
+        "diag_loss_chart": "Curva de pérdida",
+
+        # -- Fine-tune validation -----------------------------------------
+        "train_feature_mismatch": (
+            "⚠️ Discrepancia de dimensiones: el modelo guardado espera {expected} "
+            "características pero los datos actuales tienen {got}. No se puede ajustar."
+        ),
 
         # -- Tab 3: Forecast ----------------------------------------------
         "forecast_header": "Trayectoria de pronóstico",

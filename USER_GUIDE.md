@@ -65,7 +65,8 @@ forecast horizon, and all training hyperparameters.
 Historical data is fetched via **yfinance**, a Python library that retrieves
 daily market data from Yahoo Finance. When you press *Load Data*, the app
 downloads daily OHLCV (Open, High, Low, Close, Volume) records for the
-selected asset and date range.
+selected asset, starting from the configured start date **up to today**
+(the end date is always set to the current date automatically).
 
 **BTC-USD** trades 7 days a week, while ETFs (GLD, SLV, PALL) only trade on
 weekdays. The app handles both calendars automatically.
@@ -409,7 +410,29 @@ After training, the app analyses loss curves automatically:
 
 The diagnostics panel also shows the **best epoch**, **generalisation gap**,
 and **concrete suggestions**.
+#### Apply Suggestions Button
 
+If the diagnostics detect a problem (⚠️ Overfitting, Underfitting, or Noisy),
+an **✨ Apply Suggestions** button appears. Clicking it automatically adjusts
+the sidebar hyperparameters based on the verdict:
+
+| Verdict | Auto-adjustments |
+|---------|------------------|
+| Overfitting | Reduce epochs to best epoch, step down hidden size and layers |
+| Underfitting | Increase epochs by 50%, step up hidden size, layers, and LR |
+| Noisy | Decrease learning rate, increase batch size and sequence length |
+
+After applying, a green banner confirms the changes. You can then re-train
+with the optimised settings.
+
+#### Loss Chart Markers
+
+The training loss chart now highlights:
+
+- **Green dashed line** — the **best epoch** (lowest validation loss)
+- **Red shaded zone** — the **overfitting region** (only shown when the
+  verdict is "overfitting"), marking epochs where the model started
+  memorising training data
 ### Saving to the Registry
 
 After training completes, the trained model, scaler, and metadata are
@@ -799,8 +822,8 @@ will improve its calibration with more data or longer training.
 | Problem | Try |
 |---------|-----|
 | Underfitting | ↑ Hidden size, ↑ Layers, ↑ Epochs |
-| Overfitting | ↓ Epochs, ↓ Hidden size, ↑ Dropout, ↑ Data range |
-| Unstable loss | ↓ Learning rate |
+| Overfitting | ↓ Epochs, ↓ Hidden size, ↑ Dropout, ↑ Data range, or click **Apply Suggestions** |
+| Unstable loss | ↓ Learning rate, or click **Apply Suggestions** |
 | Flat predictions | ↑ Learning rate, ↑ Hidden size |
 | Wide uncertainty band | ↓ Forecast steps, ↑ Data, ↑ Epochs |
 | Slow training | Switch to TCN, ↑ Batch size |

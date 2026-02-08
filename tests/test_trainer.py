@@ -128,3 +128,36 @@ class TestModelTrainer:
             calls.append(epoch)
         trainer.train(train_dl, val_dl, epochs=3, learning_rate=0.001, on_epoch=cb)
         assert calls == [0, 1, 2]
+
+    def test_quantiles_property(self):
+        """ModelTrainer.quantiles returns the quantiles tuple."""
+        trainer = self._make_trainer()
+        assert trainer.quantiles == QUANTILES
+        assert isinstance(trainer.quantiles, tuple)
+
+    def test_finetune_with_loaded_scaler(self, synthetic_X, synthetic_y):
+        """Fine-tune from checkpoint: scaler set before prepare_data prevents NotFittedError."""
+        trainer = self._make_trainer()
+        train_dl, val_dl = trainer.prepare_data(
+            synthetic_X, synthetic_y, test_size=0.2, batch_size=8,
+        )
+        trainer.train(train_dl, val_dl, epochs=2, learning_rate=0.001)
+        saved_scaler = trainer.scaler  # already fitted
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "ckpt.pth")
+            trainer.save_checkpoint(path)
+
+            # Create a fresh trainer and load checkpoint
+            trainer2 = self._make_trainer()
+            trainer2.load_checkpoint(path)
+            # Explicitly set scaler BEFORE prepare_data (simulating fine-tune flow)
+            trainer2.scaler = saved_scaler
+            train_dl2, val_dl2 = trainer2.prepare_data(
+                synthetic_X, synthetic_y, test_size=0.2, batch_size=8,
+                refit_scaler=False,
+            )
+            # Should not raise NotFittedError
+            history = trainer2.train(train_dl2, val_dl2, epochs=1, learning_rate=0.001)
+            # History accumulates: 2 from checkpoint + 1 new = 3
+            assert len(history["train_loss"]) == 3
