@@ -24,12 +24,12 @@ from gldpred.registry import ModelAssignments
 
 
 def _t() -> Dict[str, str]:
-    code = st.session_state.get(state.KEY_LANGUAGE, "en")
-    return STRINGS.get(code, STRINGS["en"])
+    code = st.session_state.get(state.KEY_LANGUAGE, "es")
+    return STRINGS.get(code, STRINGS["es"])
 
 
 def _lang() -> str:
-    return st.session_state.get(state.KEY_LANGUAGE, "en")
+    return st.session_state.get(state.KEY_LANGUAGE, "es")
 
 
 def render_sidebar(arch_options: List[str]) -> None:
@@ -40,14 +40,26 @@ def render_sidebar(arch_options: List[str]) -> None:
     with st.sidebar:
         st.header(t["sidebar_config"])
 
-        # Language
+        # Language — persisted via query_params
+        _CODE_TO_LABEL = {v: k for k, v in LANGUAGES.items()}
+        # Restore from query params if available
+        qp_lang = st.query_params.get("lang")
+        if qp_lang in LANGUAGES.values() and state.KEY_LANGUAGE not in ss:
+            ss[state.KEY_LANGUAGE] = qp_lang
+        current_code = ss.get(state.KEY_LANGUAGE, "es")
+        current_label = _CODE_TO_LABEL.get(current_code, "Español")
+        lang_keys = list(LANGUAGES.keys())
+        default_idx = lang_keys.index(current_label) if current_label in lang_keys else 0
         lang_label = st.selectbox(
-            "Language / Idioma",
-            list(LANGUAGES.keys()),
-            index=0,
+            "🌐 Idioma / Language",
+            lang_keys,
+            index=default_idx,
             key="lang_select",
         )
-        ss[state.KEY_LANGUAGE] = LANGUAGES[lang_label]
+        new_code = LANGUAGES[lang_label]
+        if new_code != ss.get(state.KEY_LANGUAGE):
+            ss[state.KEY_LANGUAGE] = new_code
+            st.query_params["lang"] = new_code
         t = _t()
 
         # Asset selection
@@ -91,8 +103,8 @@ def render_sidebar(arch_options: List[str]) -> None:
         df = ss.get(state.KEY_RAW_DF)
         if df is not None and len(df) > 0:
             if st.button(
-                "🤖 Auto-Config" if _lang() == "en" else "🤖 Configuración Automática",
-                help="Sugerir hiperparámetros basados en asset y volatilidad" if _lang() == "es" else "Suggest hyperparameters based on asset and volatility",
+                t["sidebar_auto_config"],
+                help=t["sidebar_auto_config_help"],
             ):
                 suggested = suggest_training_config(asset, df)
                 rationale = get_config_rationale(asset, df, suggested)
@@ -101,9 +113,7 @@ def render_sidebar(arch_options: List[str]) -> None:
                 for key, value in suggested.items():
                     ss[key] = value
                 
-                st.success(
-                    f"✅ Configuración aplicada" if _lang() == "es" else f"✅ Configuration applied"
-                )
+                st.success(t["sidebar_config_applied"])
                 st.caption(rationale)
                 st.rerun()
 
@@ -243,9 +253,7 @@ def _render_model_selector(t: Dict[str, str], asset: str) -> None:
     active = get_active_model()
     if active is None or active.model_id != chosen_id:
         if st.button(
-            "📥 " + (
-                "Cargar modelo" if _lang() == "es" else "Load model"
-            ),
+            t["sidebar_load_model"],
             key="btn_load_sidebar_model",
         ):
             try:
@@ -255,10 +263,4 @@ def _render_model_selector(t: Dict[str, str], asset: str) -> None:
             except Exception as e:
                 st.error(str(e))
     else:
-        st.caption(
-            "✅ " + (
-                f"Activo: {active.label}"
-                if _lang() == "es"
-                else f"Active: {active.label}"
-            )
-        )
+        st.caption(t["sidebar_model_active"].format(label=active.label))

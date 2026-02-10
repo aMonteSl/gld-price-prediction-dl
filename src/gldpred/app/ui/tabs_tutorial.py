@@ -5,11 +5,25 @@ from typing import Dict
 
 import streamlit as st
 
+from gldpred.app.components.onboarding import restart_onboarding
+
 
 def render(t: Dict[str, str]) -> None:
     """Render the Tutorial tab."""
     st.header(t["tut_header"])
     st.markdown(t["tut_disclaimer"])
+
+    # Restart guided onboarding button
+    if st.button(
+        t.get("onb_restart", "📘 Restart Guided Tutorial"),
+        key="tut_restart_onboarding",
+        type="primary",
+    ):
+        restart_onboarding()
+        st.success(t.get("onb_restart_done", "Tutorial restarted!"))
+        st.rerun()
+
+    st.divider()
 
     sections = [
         ("tut_s1_title", "tut_s1_body"),

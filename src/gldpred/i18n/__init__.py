@@ -8,7 +8,8 @@ Usage::
     st.header(t["data_header"])
 """
 
-LANGUAGES = {"English": "en", "Español": "es"}
+LANGUAGES = {"Español": "es", "English": "en"}
+DEFAULT_LANGUAGE = "es"
 
 STRINGS: dict[str, dict[str, str]] = {
     # ==================================================================
@@ -51,6 +52,11 @@ STRINGS: dict[str, dict[str, str]] = {
             "registry, and educational decision support. Nothing in this app "
             "constitutes financial advice."
         ),
+        "sidebar_auto_config": "🤖 Auto-Config",
+        "sidebar_auto_config_help": "Suggest hyperparameters based on asset and volatility",
+        "sidebar_config_applied": "✅ Configuration applied",
+        "sidebar_load_model": "📥 Load model",
+        "sidebar_model_active": "✅ Active: {label}",
 
         # -- Tabs ---------------------------------------------------------
         "tab_data": "📊 Data",
@@ -320,6 +326,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "ap_chart_title": "Price Trajectory & Action Plan",
         "ap_plan_saved": "Plan saved to data/trade_plans/",
         "ap_no_forecast": "Generate a forecast first in the Forecast tab.",
+        "ap_click_generate": "Press **Generate Action Plan** to create an action plan.",
         "ap_col_day": "Day",
         "ap_col_date": "Date",
         "ap_col_action": "Action",
@@ -628,6 +635,8 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "dash_view_details": "View Details",
         "dash_analysing_all": "Analyzing all assets...",
         "dash_last_update": "Last updated",
+        "dash_click_run": "Press **Analyze All Assets** to get started.",
+        "dash_model_label": "Model",
 
         # -- Portfolio tab ------------------------------------------------
         "tab_portfolio": "💼 Portfolio",
@@ -726,6 +735,228 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "backtest_col_error": "Error",
         "backtest_col_band": "In Band",
         "backtest_col_pnl": "P&L",
+
+        # -- Data Hub tab -------------------------------------------------
+        "tab_datahub": "📦 Data Hub",
+        "hub_header": "Data Hub — Application Data Center",
+        "hub_subtitle": "Inspect, export, and manage all persisted data used by the app.",
+
+        # Market Data
+        "hub_market_header": "📊 Market Data",
+        "hub_market_asset": "Asset",
+        "hub_market_records": "Records",
+        "hub_market_range": "Date Range",
+        "hub_market_cache_size": "Cache Size",
+        "hub_market_refresh": "🔄 Refresh Data",
+        "hub_market_export_csv": "📥 Export CSV",
+        "hub_market_no_data": "No market data loaded. Go to the Data tab to load asset data.",
+
+        # Models
+        "hub_models_header": "🧠 Models",
+        "hub_models_empty": "No models in registry. Train a model first.",
+        "hub_models_total": "Total Models",
+        "hub_models_epochs": "Epochs",
+        "hub_models_verdict": "Verdict",
+        "hub_models_export_meta": "📥 Export JSON",
+        "hub_models_set_primary": "⭐ Set Primary",
+        "hub_models_primary_done": "Primary model for {asset} set to: {label}",
+        "hub_models_is_primary": "⭐ Primary",
+        "hub_models_delete": "🗑️ Delete",
+        "hub_models_confirm_delete": "Type DELETE to confirm:",
+        "hub_models_deleted": "Model deleted.",
+
+        # Forecasts
+        "hub_forecasts_header": "🔮 Forecasts",
+        "hub_forecasts_empty": "No forecast cached. Generate one in the Forecast tab.",
+        "hub_forecasts_asset": "Asset",
+        "hub_forecasts_model": "Model",
+        "hub_forecasts_export": "📥 Export Forecast CSV",
+        "hub_forecasts_clear": "🗑️ Clear Forecast",
+        "hub_forecasts_cleared": "Forecast cleared.",
+
+        # Trade Log
+        "hub_trades_header": "💼 Trade Log",
+        "hub_trades_empty": "No trades recorded. Archive recommendations in the Portfolio tab.",
+        "hub_trades_export": "📥 Export Trade Log CSV",
+
+        # Performance
+        "hub_performance_header": "📈 Model Performance History",
+        "hub_performance_empty": "No closed trades yet. Close trades with actual outcomes to see performance stats.",
+        "hub_perf_model": "Model",
+        "hub_perf_trades": "Trades",
+        "hub_perf_win_rate": "Win Rate",
+        "hub_perf_mae": "MAE",
+        "hub_perf_bias": "Bias",
+        "hub_perf_avg_pred": "Avg Predicted",
+        "hub_perf_avg_actual": "Avg Actual",
+        "hub_perf_degradation": "⚠️ Model '{model}' shows degradation (win rate: {wr}%). Consider retraining.",
+
+        # Global actions
+        "hub_global_header": "⚙️ Global Actions",
+        "hub_global_export_all": "📦 Export All Data (ZIP)",
+        "hub_global_download_zip": "📥 Download ZIP",
+        "hub_global_nothing_to_export": "No data to export.",
+        "hub_global_reset": "🗑️ Reset All Application Data",
+        "hub_global_reset_warning": "⚠️ This will permanently delete ALL models, trade logs, forecasts, and cached data. This action cannot be undone.",
+        "hub_global_reset_confirm": "Type RESET to confirm:",
+        "hub_global_reset_done": "All application data has been reset.",
+
+        # -- Guided Onboarding --------------------------------------------
+        "onb_progress": "Step",
+        "onb_back": "⬅️ Back",
+        "onb_next": "Next ➡️",
+        "onb_skip": "⏭️ Skip tutorial",
+        "onb_finish": "✅ Get started",
+        "onb_restart": "📘 Restart Guided Tutorial",
+        "onb_restart_done": "Tutorial restarted! Refresh to see it.",
+
+        "onb_step1_title": "Welcome to the App",
+        "onb_step1_body": """
+**What does this app do?**
+
+Imagine you have **$1,000** and you're wondering: *"Should I invest in gold today?"*
+
+This app uses **deep learning** (artificial intelligence) to analyze years of market
+data and give you an informed answer:
+
+- 📈 **Forecasts** the likely price trajectory for the next 20 trading days
+- 🎯 **Recommends** whether to BUY, HOLD, or AVOID — with a confidence score
+- 💰 **Estimates** how much you could gain or lose on your $1,000
+- ⚠️ **Warns** you about risks: stop-loss, max drawdown, volatility
+
+> 🚫 **Important**: This is NOT financial advice. It's an educational tool to explore
+> how machine learning can analyze markets.
+""",
+
+        "onb_step2_title": "The Dashboard — Your Starting Point",
+        "onb_step2_body": """
+The **🏠 Dashboard** is the first thing you see. It answers one question:
+
+> *"If I invest today, which asset looks best?"*
+
+It shows:
+- A **leaderboard** ranking all assets (Gold, Silver, Bitcoin, Palladium)
+- The **top recommendation** with projected gains on your investment
+- **Entry timing** (when to buy) and **exit timing** (when to sell)
+
+**Example**: The dashboard might say:
+- 🟢 **Gold (GLD) — BUY** with 75% confidence
+- Expected return: +2.3% → on $1,000 that's about **+$23**
+- Best entry: days 1-3, Best exit: day 15
+""",
+
+        "onb_step3_title": "Understanding the Forecast",
+        "onb_step3_body": """
+The **📈 Forecast** tab shows where the model thinks the price is headed.
+
+Instead of a single prediction, the model gives you **three scenarios**:
+
+| Scenario | What it means |
+|----------|---------------|
+| **P90** (optimistic) | "Things could go this well" |
+| **P50** (median) | "The most likely outcome" |
+| **P10** (pessimistic) | "Things could go this badly" |
+
+The **fan chart** draws these as a band. A wider band = more uncertainty.
+
+**Example with $1,000 in gold**:
+- P90: $1,040 (+$40)
+- P50: $1,015 (+$15)
+- P10: $985 (−$15)
+""",
+
+        "onb_step4_title": "The Recommendation — Should I Invest?",
+        "onb_step4_body": """
+The **🎯 Recommendation** tab analyzes the forecast and gives you a clear signal:
+
+- 🟢 **BUY** — The model sees a good opportunity
+- 🟡 **HOLD** — Not convinced either way; wait
+- 🔴 **AVOID** — Too much risk or downward trend
+
+The recommendation considers **5 factors**:
+1. Is the expected return positive enough?
+2. Is the market trending up? (SMA50 > SMA200)
+3. Is volatility manageable?
+4. Is the uncertainty band narrow enough?
+5. Is the model healthy and well-trained?
+
+It also generates an **Action Plan**: specific days to buy, hold, or sell.
+""",
+
+        "onb_step5_title": "Models — The Heart of the System",
+        "onb_step5_body": """
+The app uses **neural networks** (deep learning models) to make predictions.
+
+You can:
+- **Train** a new model in the 🔧 Train tab
+- **Compare** different model types: TCN, GRU, LSTM
+- **Save** models to a registry and reuse them later
+- **Assign** a primary model per asset
+
+**What's a model?** Think of it as a student that has studied years of market data.
+After training, it can make educated guesses about the future.
+
+**Tip**: Start with TCN (the default). It trains the fastest and usually
+performs well.
+""",
+
+        "onb_step6_title": "Portfolio & Trade Log",
+        "onb_step6_body": """
+The **💼 Portfolio** tab lets you track your investment decisions over time.
+
+**How it works:**
+1. Generate a recommendation in the 🎯 tab
+2. Archive it to the trade log
+3. Later, close the trade with the actual result
+4. Compare what the model predicted vs what actually happened
+
+This answers the critical question: *"Is the model actually right?"*
+
+**Example**: You archived a BUY signal for gold at $185. Two weeks later,
+gold is at $188. You close the trade → actual return +1.6% vs predicted +2.1%.
+The model was slightly optimistic but directionally correct.
+""",
+
+        "onb_step7_title": "Data Hub — Full Transparency",
+        "onb_step7_body": """
+The **📦 Data Hub** gives you complete visibility into everything the app stores:
+
+- **Market data**: what's loaded, date ranges, cache size
+- **Models**: all trained models, their metrics, export/delete
+- **Forecasts**: cached predictions, export to CSV
+- **Trade log**: all investments, export to CSV
+- **Performance**: how accurate each model has been
+
+You can also:
+- **Export everything** as a ZIP file
+- **Reset all data** if you want a clean start
+
+Nothing is hidden. You're always in control.
+""",
+
+        "onb_step8_title": "Important Reminders",
+        "onb_step8_body": """
+Before you start, keep these in mind:
+
+⚠️ **This is NOT financial advice**
+This app is an educational tool. Real investment decisions should always
+involve a qualified financial advisor.
+
+📊 **Past performance ≠ future results**
+Even the best model can be wrong. Markets are inherently unpredictable.
+
+🔄 **Models need retraining**
+Market conditions change. A model trained 30 days ago may be less accurate
+than a freshly trained one.
+
+💡 **Start small**
+Use the practice mode. Try with a small amount. Understand the signals before
+committing real money.
+
+---
+
+🎉 **You're ready to begin!** Head to the Dashboard to see your first analysis.
+""",
     },
 
     # ==================================================================
@@ -769,6 +1000,11 @@ The registry is stored in `data/model_registry/` (git-ignored).
             "modelos y soporte de decisión educativo. Nada en esta app "
             "constituye asesoramiento financiero."
         ),
+        "sidebar_auto_config": "🤖 Configuración Automática",
+        "sidebar_auto_config_help": "Sugerir hiperparámetros basados en activo y volatilidad",
+        "sidebar_config_applied": "✅ Configuración aplicada",
+        "sidebar_load_model": "📥 Cargar modelo",
+        "sidebar_model_active": "✅ Activo: {label}",
 
         # -- Tabs ---------------------------------------------------------
         "tab_data": "📊 Datos",
@@ -1037,6 +1273,7 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "ap_chart_title": "Trayectoria de Precio y Plan de Acción",
         "ap_plan_saved": "Plan guardado en data/trade_plans/",
         "ap_no_forecast": "Genera un pronóstico primero en la pestaña Pronóstico.",
+        "ap_click_generate": "Pulsa **Generar Plan de Acción** para crear un plan.",
         "ap_col_day": "Día",
         "ap_col_date": "Fecha",
         "ap_col_action": "Acción",
@@ -1341,6 +1578,8 @@ directa. El registro se almacena en `data/model_registry/`.
         "dash_view_details": "Ver Detalles",
         "dash_analysing_all": "Analizando todos los activos...",
         "dash_last_update": "Última actualización",
+        "dash_click_run": "Pulsa **Analizar Todos los Activos** para comenzar.",
+        "dash_model_label": "Modelo",
 
         # -- Portfolio tab ------------------------------------------------
         "tab_portfolio": "💼 Portafolio",
@@ -1439,5 +1678,230 @@ directa. El registro se almacena en `data/model_registry/`.
         "backtest_col_error": "Error",
         "backtest_col_band": "En Banda",
         "backtest_col_pnl": "P&L",
+
+        # -- Data Hub tab -------------------------------------------------
+        "tab_datahub": "📦 Centro de Datos",
+        "hub_header": "Centro de Datos — Panel de Control",
+        "hub_subtitle": "Inspecciona, exporta y gestiona todos los datos persistidos de la aplicación.",
+
+        # Market Data
+        "hub_market_header": "📊 Datos de Mercado",
+        "hub_market_asset": "Activo",
+        "hub_market_records": "Registros",
+        "hub_market_range": "Rango de Fechas",
+        "hub_market_cache_size": "Tamaño Caché",
+        "hub_market_refresh": "🔄 Actualizar Datos",
+        "hub_market_export_csv": "📥 Exportar CSV",
+        "hub_market_no_data": "No hay datos de mercado cargados. Ve a la pestaña Datos para cargar un activo.",
+
+        # Models
+        "hub_models_header": "🧠 Modelos",
+        "hub_models_empty": "No hay modelos en el registro. Entrena un modelo primero.",
+        "hub_models_total": "Total Modelos",
+        "hub_models_epochs": "Épocas",
+        "hub_models_verdict": "Veredicto",
+        "hub_models_export_meta": "📥 Exportar JSON",
+        "hub_models_set_primary": "⭐ Primario",
+        "hub_models_primary_done": "Modelo primario de {asset} establecido: {label}",
+        "hub_models_is_primary": "⭐ Primario",
+        "hub_models_delete": "🗑️ Eliminar",
+        "hub_models_confirm_delete": "Escribe DELETE para confirmar:",
+        "hub_models_deleted": "Modelo eliminado.",
+
+        # Forecasts
+        "hub_forecasts_header": "🔮 Pronósticos",
+        "hub_forecasts_empty": "No hay pronósticos en caché. Genera uno en la pestaña Pronóstico.",
+        "hub_forecasts_asset": "Activo",
+        "hub_forecasts_model": "Modelo",
+        "hub_forecasts_export": "📥 Exportar Pronóstico CSV",
+        "hub_forecasts_clear": "🗑️ Limpiar Pronóstico",
+        "hub_forecasts_cleared": "Pronóstico limpiado.",
+
+        # Trade Log
+        "hub_trades_header": "💼 Registro de Operaciones",
+        "hub_trades_empty": "No hay operaciones registradas. Archiva recomendaciones en la pestaña Portafolio.",
+        "hub_trades_export": "📥 Exportar Operaciones CSV",
+
+        # Performance
+        "hub_performance_header": "📈 Historial de Rendimiento del Modelo",
+        "hub_performance_empty": "No hay operaciones cerradas. Cierra operaciones con resultados reales para ver estadísticas.",
+        "hub_perf_model": "Modelo",
+        "hub_perf_trades": "Operaciones",
+        "hub_perf_win_rate": "Tasa de Éxito",
+        "hub_perf_mae": "EAM",
+        "hub_perf_bias": "Sesgo",
+        "hub_perf_avg_pred": "Predicho Prom.",
+        "hub_perf_avg_actual": "Real Prom.",
+        "hub_perf_degradation": "⚠️ El modelo '{model}' muestra degradación (tasa de éxito: {wr}%). Considera reentrenar.",
+
+        # Global actions
+        "hub_global_header": "⚙️ Acciones Globales",
+        "hub_global_export_all": "📦 Exportar Todos los Datos (ZIP)",
+        "hub_global_download_zip": "📥 Descargar ZIP",
+        "hub_global_nothing_to_export": "No hay datos para exportar.",
+        "hub_global_reset": "🗑️ Resetear Todos los Datos",
+        "hub_global_reset_warning": "⚠️ Esto eliminará permanentemente TODOS los modelos, registros de operaciones, pronósticos y datos en caché. Esta acción no se puede deshacer.",
+        "hub_global_reset_confirm": "Escribe RESET para confirmar:",
+        "hub_global_reset_done": "Todos los datos de la aplicación han sido reseteados.",
+
+        # -- Guided Onboarding --------------------------------------------
+        "onb_progress": "Paso",
+        "onb_back": "⬅️ Atrás",
+        "onb_next": "Siguiente ➡️",
+        "onb_skip": "⏭️ Saltar tutorial",
+        "onb_finish": "✅ Empezar a usar",
+        "onb_restart": "📘 Reiniciar Tutorial Guiado",
+        "onb_restart_done": "Tutorial reiniciado. Se mostrará al recargar la página.",
+
+        "onb_step1_title": "Bienvenido a la Aplicación",
+        "onb_step1_body": """
+**¿Qué hace esta aplicación?**
+
+Imagina que tienes **1.000 €** y te preguntas: *"¿Debería invertir en oro hoy?"*
+
+Esta app utiliza **aprendizaje profundo** (inteligencia artificial) para analizar
+años de datos de mercado y darte una respuesta informada:
+
+- 📈 **Pronostica** la trayectoria probable del precio para los próximos 20 días
+- 🎯 **Recomienda** si COMPRAR, MANTENER o EVITAR — con una puntuación de confianza
+- 💰 **Estima** cuánto podrías ganar o perder con tus 1.000 €
+- ⚠️ **Te avisa** sobre riesgos: stop-loss, caída máxima, volatilidad
+
+> 🚫 **Importante**: Esto NO es asesoramiento financiero. Es una herramienta
+> educativa para explorar cómo la IA puede analizar mercados.
+""",
+
+        "onb_step2_title": "El Panel — Tu Punto de Partida",
+        "onb_step2_body": """
+El **🏠 Panel** es lo primero que ves. Responde a una pregunta:
+
+> *"Si invierto hoy, ¿qué activo se ve mejor?"*
+
+Te muestra:
+- Un **ranking** de todos los activos (Oro, Plata, Bitcoin, Paladio)
+- La **recomendación principal** con las ganancias proyectadas
+- **Cuándo entrar** (comprar) y **cuándo salir** (vender)
+
+**Ejemplo**: El panel podría decir:
+- 🟢 **Oro (GLD) — COMPRAR** con 75% de confianza
+- Retorno esperado: +2,3% → sobre 1.000 € eso son unos **+23 €**
+- Mejor entrada: días 1-3, Mejor salida: día 15
+""",
+
+        "onb_step3_title": "Entendiendo el Pronóstico",
+        "onb_step3_body": """
+La pestaña **📈 Pronóstico** muestra hacia dónde cree el modelo que va el precio.
+
+En lugar de una sola predicción, el modelo te da **tres escenarios**:
+
+| Escenario | Qué significa |
+|-----------|---------------|
+| **P90** (optimista) | "Las cosas podrían ir así de bien" |
+| **P50** (mediana) | "El resultado más probable" |
+| **P10** (pesimista) | "Las cosas podrían ir así de mal" |
+
+El **gráfico de abanico** dibuja estos escenarios como una banda.
+Una banda más ancha = más incertidumbre.
+
+**Ejemplo con 1.000 € en oro**:
+- P90: 1.040 € (+40 €)
+- P50: 1.015 € (+15 €)
+- P10: 985 € (−15 €)
+""",
+
+        "onb_step4_title": "La Recomendación — ¿Debería Invertir?",
+        "onb_step4_body": """
+La pestaña **🎯 Recomendación** analiza el pronóstico y te da una señal clara:
+
+- 🟢 **COMPRAR** — El modelo ve una buena oportunidad
+- 🟡 **MANTENER** — No está convencido; espera
+- 🔴 **EVITAR** — Demasiado riesgo o tendencia bajista
+
+La recomendación considera **5 factores**:
+1. ¿Es el retorno esperado suficientemente positivo?
+2. ¿El mercado está en tendencia alcista? (SMA50 > SMA200)
+3. ¿La volatilidad es manejable?
+4. ¿La banda de incertidumbre es estrecha?
+5. ¿El modelo está bien entrenado?
+
+También genera un **Plan de Acción**: días concretos para comprar, mantener o vender.
+""",
+
+        "onb_step5_title": "Los Modelos — El Corazón del Sistema",
+        "onb_step5_body": """
+La app usa **redes neuronales** (modelos de aprendizaje profundo) para hacer predicciones.
+
+Puedes:
+- **Entrenar** un nuevo modelo en la pestaña 🔧 Entrenar
+- **Comparar** diferentes tipos: TCN, GRU, LSTM
+- **Guardar** modelos en un registro y reutilizarlos
+- **Asignar** un modelo primario por activo
+
+**¿Qué es un modelo?** Piensa en él como un estudiante que ha estudiado años
+de datos de mercado. Después de entrenar, puede hacer predicciones educadas
+sobre el futuro.
+
+**Consejo**: Empieza con TCN (el tipo por defecto). Es el más rápido de entrenar
+y normalmente funciona bien.
+""",
+
+        "onb_step6_title": "Portafolio y Registro de Operaciones",
+        "onb_step6_body": """
+La pestaña **💼 Portafolio** te permite seguir tus decisiones de inversión.
+
+**Cómo funciona:**
+1. Genera una recomendación en la pestaña 🎯
+2. Archívala en el registro de operaciones
+3. Más tarde, cierra la operación con el resultado real
+4. Compara lo que el modelo predijo vs lo que realmente pasó
+
+Esto responde a la pregunta clave: *"¿Acierta realmente el modelo?"*
+
+**Ejemplo**: Archivaste una señal COMPRAR para oro a 185 $. Dos semanas después,
+el oro está a 188 $. Cierras la operación → retorno real +1,6% vs predicho +2,1%.
+El modelo fue ligeramente optimista pero acertó la dirección.
+""",
+
+        "onb_step7_title": "Centro de Datos — Transparencia Total",
+        "onb_step7_body": """
+El **📦 Centro de Datos** te da visibilidad completa sobre todo lo que la app almacena:
+
+- **Datos de mercado**: qué hay cargado, rangos de fechas, tamaño de caché
+- **Modelos**: todos los modelos entrenados, sus métricas, exportar/eliminar
+- **Pronósticos**: predicciones en caché, exportar a CSV
+- **Registro de operaciones**: todas las inversiones, exportar a CSV
+- **Rendimiento**: cuán preciso ha sido cada modelo
+
+También puedes:
+- **Exportar todo** como archivo ZIP
+- **Resetear todos los datos** si quieres empezar de cero
+
+Nada está oculto. Siempre tienes el control.
+""",
+
+        "onb_step8_title": "Recordatorios Importantes",
+        "onb_step8_body": """
+Antes de empezar, ten en cuenta:
+
+⚠️ **Esto NO es asesoramiento financiero**
+Esta app es una herramienta educativa. Las decisiones de inversión reales
+deben involucrar siempre a un asesor financiero cualificado.
+
+📊 **Rendimiento pasado ≠ resultados futuros**
+Incluso el mejor modelo puede equivocarse. Los mercados son inherentemente
+impredecibles.
+
+🔄 **Los modelos necesitan reentrenamiento**
+Las condiciones del mercado cambian. Un modelo entrenado hace 30 días
+puede ser menos preciso que uno recién entrenado.
+
+💡 **Empieza poco a poco**
+Usa el modo práctico. Prueba con una cantidad pequeña. Entiende las señales
+antes de comprometer dinero real.
+
+---
+
+🎉 **¡Estás listo para empezar!** Ve al Panel para ver tu primer análisis.
+""",
     },
 }

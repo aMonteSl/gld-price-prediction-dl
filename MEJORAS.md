@@ -863,7 +863,82 @@ TOTAL (Con opcionales)         -             20–28 semanas
 
 ---
 
-## 11. Conclusión
+## 11. Estado de Implementación
+
+> Última actualización: Febrero 2026
+
+### 11.1 Fases Completadas
+
+Las 7 FASES del refactor Decision-First se implementaron completamente
+(commit `fe2c99b`, 95 archivos modificados, 13.605 inserciones, 247 tests,
+12 pestañas). Posteriormente se añadieron 3 mejoras adicionales:
+
+#### Fase Extra 1 — i18n Spanish-First ✅
+
+| Cambio | Detalle |
+|--------|---------|
+| Idioma por defecto | `DEFAULT_LANGUAGE = "es"`, `LANGUAGES = {"Español": "es", "English": "en"}` |
+| Persistencia de idioma | `st.query_params["lang"]` sincronizado con `session_state` |
+| Fallbacks actualizados | `_t()` y `_lang()` retornan `"es"` por defecto |
+| Strings hardcodeados | Eliminados de `sidebar.py`, `tabs_dashboard.py`, `tabs_recommendation.py` |
+| Nuevas claves i18n | `sidebar_auto_config`, `sidebar_load_model`, `dash_click_run`, `dash_model_label`, `ap_click_generate` (EN + ES) |
+
+#### Fase Extra 2 — Data Hub (Centro de Datos) ✅
+
+| Componente | Descripción |
+|------------|-------------|
+| `tabs_datahub.py` | ~300 líneas, 6 secciones renderizadas |
+| Datos de Mercado | Info del activo, registros, rango de fechas, tamaño de caché, refrescar/exportar CSV |
+| Modelos | Lista con metadatos, exportar JSON, asignar primario, eliminar con confirmación |
+| Pronósticos | Caché de pronósticos, exportar CSV, limpiar |
+| Trade Log | Tabla de trades, estadísticas, exportar CSV |
+| Rendimiento | Accuracy por modelo desde trades cerrados, flags de degradación |
+| Acciones Globales | Exportar Todo (ZIP con CSV/JSON/JSONL), Resetear Todo |
+| Claves i18n | ~65 claves con prefijo `hub_*` en EN y ES |
+
+#### Fase Extra 3 — Onboarding Guiado ✅
+
+| Componente | Descripción |
+|------------|-------------|
+| `onboarding.py` | ~115 líneas, 8 pasos interactivos |
+| Activación | Automática en primera visita (`KEY_TUTORIAL_DONE = False`) |
+| Navegación | Botones Anterior / Siguiente / Saltar con barra de progreso |
+| Contenido | 8 pasos con markdown enriquecido y ejemplos con €1.000 |
+| Re-iniciar | Botón "📘 Reiniciar Tutorial Guiado" en la pestaña Tutorial |
+| Claves i18n | ~155 líneas con prefijo `onb_*` en EN y ES |
+
+**Pasos del onboarding:**
+1. Bienvenida — qué hace la aplicación
+2. Dashboard — leaderboard y recomendación principal
+3. Pronóstico — P10/P50/P90 explicados con dinero
+4. Recomendación — BUY/HOLD/AVOID y 5 factores
+5. Modelos — redes neuronales, TCN/GRU/LSTM
+6. Portafolio y Trade Log — seguimiento de resultados
+7. Centro de Datos — transparencia y control
+8. Recordatorios Importantes — disclaimer, reentrenamiento, empezar pequeño
+
+### 11.2 Métricas Actuales
+
+| Métrica | Valor |
+|---------|-------|
+| Pestañas | 13 (Dashboard · Data · Train · Models · Forecast · Recommendation · Evaluation · Compare · Portfolio · Health · Backtest · Data Hub · Tutorial) |
+| Tests | 247 (18 archivos de test) |
+| Claves i18n | ~1.900+ (EN + ES) |
+| Idioma por defecto | Español (ES) |
+| Arquitecturas soportadas | TCN (default), GRU, LSTM |
+| Activos soportados | GLD, SLV, BTC-USD, PALL |
+
+### 11.3 Pendiente (No bloqueante)
+
+- [ ] Videos conceptuales embebidos en Tutorial
+- [ ] Alertas por Email / Push (§8.3)
+- [ ] Exportar plan a PDF (§8.4)
+- [ ] Risk Budgeting avanzado (§8.2)
+- [ ] A/B testing con usuarios reales
+
+---
+
+## 12. Conclusión
 
 La aplicación tiene **excelente fundamento técnico** pero sufre de
 **arquitectura UX confusa**. Los 8 tabs independientes sin jerarquía clara,

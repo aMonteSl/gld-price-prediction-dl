@@ -34,10 +34,12 @@ training, **model management** (rename, delete, assign primary),
 forecasting, recommendation, evaluation, asset comparison, **portfolio
 tracking** (trade log with predicted vs actual outcomes), **model health
 monitoring** (staleness, accuracy, recalibration advice), **walk-forward
-backtesting**, and a built-in tutorial — all fully internationalised in
-**English and Spanish**. An **educational glossary** with 25 bilingual
-terms provides context-sensitive help via popover components throughout
-the interface.
+backtesting**, a centralised **Data Hub** for inspecting, exporting, and
+managing all persisted data, and a built-in tutorial with **guided
+onboarding** for first-time users — all fully internationalised in
+**Spanish (default) and English**. An **educational glossary** with 25
+bilingual terms provides context-sensitive help via popover components
+throughout the interface.
 
 A **decision-first dashboard** serves as the landing page, showing all
 assets at a glance with recommendations, leaderboard, and entry/exit
@@ -132,11 +134,12 @@ gld-price-prediction-dl/
 │       ├── glossary.py           # Educational glossary + info_term() popover
 │       ├── compare_controller.py # Compare-tab orchestration
 │       ├── plots.py              # Fan chart & loss chart plot helpers
-│       ├── streamlit_app.py      # 12-tab Streamlit GUI
+│       ├── streamlit_app.py      # 13-tab Streamlit GUI (Spanish-first)
 │       ├── components/
 │       │   ├── __init__.py       # ForecastCache, empty_states
 │       │   ├── forecast_cache.py # In-memory forecast cache with TTL + data-hash
-│       │   └── empty_states.py   # Guided empty-state UI components
+│       │   ├── empty_states.py   # Guided empty-state UI components
+│       │   └── onboarding.py     # Guided 8-step onboarding tutorial
 │       ├── controllers/
 │       │   └── dashboard_controller.py  # Dashboard analysis engine
 │       └── ui/
@@ -151,7 +154,8 @@ gld-price-prediction-dl/
 │           ├── tabs_portfolio.py     # 💼 Portfolio / trade log
 │           ├── tabs_health.py        # 🩺 Model health monitoring
 │           ├── tabs_backtest.py      # 🔬 Walk-forward backtesting
-│           └── tabs_tutorial.py      # 📚 Tutorial
+│           ├── tabs_datahub.py       # 🗄️ Data Hub (inspect/export/manage)
+│           └── tabs_tutorial.py      # 📚 Tutorial + onboarding restart
 │
 ├── scripts/
 │   └── example.py                # CLI example script
@@ -199,14 +203,14 @@ gld-price-prediction-dl/
 | `gldpred.core.policy` | `DecisionPolicy`, `PolicyResult`, `ScoreFactor` | Transparent scoring wrapper around DecisionEngine — decomposes recommendation into labelled, bilingual factors with sentiments |
 | `gldpred.storage` | `TradeLogEntry`, `TradeLogStore` | JSONL-based trade log persistence — append, load, close trades, summary stats |
 | `gldpred.services` | `HealthService`, `ModelHealthReport`, `BacktestEngine`, `BacktestResult`, `BacktestSummary` | Model health monitoring (staleness, accuracy, recommendations); walk-forward backtesting engine |
-| `gldpred.i18n` | `STRINGS`, `LANGUAGES` | Dictionary-based i18n (English / Spanish) — 500+ keys |
+| `gldpred.i18n` | `STRINGS`, `LANGUAGES`, `DEFAULT_LANGUAGE` | Dictionary-based i18n (Spanish default / English) — 1900+ keys |
 | `gldpred.app.state` | `init_state`, `get`, `put`, `clear_training_state`, `clear_data_state`, `KEY_*` | Centralised session-state keys, defaults, and helpers |
 | `gldpred.app.data_controller` | `LoadedData`, `fetch_asset_data`, `invalidate_cache` | Cached data loading via `@st.cache_data` (1-hour TTL) |
 | `gldpred.app.glossary` | `GlossaryEntry`, `GLOSSARY`, `info_term` | Educational glossary with 25 bilingual terms + popover component |
 | `gldpred.app.compare_controller` | `CompareRow`, `run_comparison`, `available_models_for_asset` | Compare-tab orchestration: per-row asset+model selection, comparison pipeline |
-| `gldpred.app.components` | `ForecastCache`, `show_empty_no_data`, `show_empty_no_model`, `show_empty_no_forecast` | In-memory forecast cache + guided empty-state UI components |
+| `gldpred.app.components` | `ForecastCache`, `show_empty_no_data`, `show_empty_no_model`, `show_empty_no_forecast`, `should_show_onboarding`, `show_onboarding`, `restart_onboarding` | In-memory forecast cache + guided empty-state UI components + onboarding |
 | `gldpred.app.controllers` | `DashboardAssetResult`, `DashboardResult`, `run_dashboard_analysis` | Dashboard analysis engine — iterates assets, loads models, runs forecasts |
-| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 12 tabs |
+| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 13 tabs (Spanish-first) |
 | `gldpred.app.plots` | `create_loss_chart`, `create_fan_chart` | Plotly chart helpers (loss chart with best-epoch markers, fan chart) |
 
 ### Model classes (all in `gldpred.models`)

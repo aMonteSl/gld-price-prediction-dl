@@ -82,11 +82,7 @@ def render(t: Dict[str, str], lang: str) -> None:
 
         plan: ActionPlan | None = st.session_state.get("_action_plan")
         if plan is None:
-            st.caption(
-                "Press **" + t["ap_generate"] + "** to create an action plan."
-                if lang == "en"
-                else "Pulsa **" + t["ap_generate"] + "** para crear un plan."
-            )
+            st.caption(t["ap_click_generate"])
             return
 
         # ── Overall signal badge ─────────────────────────────────────

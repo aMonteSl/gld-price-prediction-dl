@@ -11,10 +11,11 @@ three-scenario analysis (P10/P50/P90), and multi-factor decision rationale.
 Supported assets: **GLD** (Gold ETF), **SLV** (Silver ETF), **BTC-USD**
 (Bitcoin), **PALL** (Palladium ETF).
 
-A fully internationalised **Streamlit** GUI (English / Spanish) lets you
-explore data, train models, visualise fan-chart forecasts, get recommendations
-with risk metrics, compare assets side-by-side for a given investment amount,
-evaluate performance, and follow a built-in tutorial — all from the browser.
+A fully internationalised **Streamlit** GUI (**Spanish-first**, with English
+available) lets you explore data, train models, visualise fan-chart forecasts,
+get recommendations with risk metrics, compare assets side-by-side for a given
+investment amount, evaluate performance, manage all persisted data in the
+**Data Hub**, and follow a **guided onboarding tutorial** — all from the browser.
 
 ---
 
@@ -30,13 +31,20 @@ evaluate performance, and follow a built-in tutorial — all from the browser.
 | **Action plan engine** | Converts trajectories into BUY / HOLD / SELL / AVOID action plans with entry-window detection, optimal exit selection, three-scenario analysis, and multi-factor decision rationale |
 | **Fine-tuning** | Resume training from a saved model checkpoint |
 | **30+ features** | Expanded technical indicators including ATR%, price-to-SMA ratios, and more |
-| **8-tab Streamlit GUI** | Data · Train · Models · Forecast · Recommendation · Evaluation · Compare · Tutorial |
+| **13-tab Streamlit GUI** | Dashboard · Data · Train · Models · Forecast · Recommendation · Evaluation · Compare · Portfolio · Health · Backtest · Data Hub · Tutorial |
+| **Spanish-first i18n** | App defaults to Spanish with persistent language selection; English fully supported |
+| **Decision-first dashboard** | Landing page showing all assets at a glance with recommendations and leaderboard |
+| **Data Hub** | Centralised view to inspect, export (CSV/JSON/ZIP), and manage all persisted application data |
+| **Guided onboarding** | 8-step interactive tutorial for first-time users with Next/Back/Skip navigation |
+| **Portfolio tracking** | Trade log with predicted vs actual outcomes and performance monitoring |
+| **Model health monitoring** | Staleness detection, accuracy tracking, and recalibration advice |
+| **Walk-forward backtesting** | Out-of-sample validation engine with summary statistics |
 | **Asset model assignment** | Assign a primary model to each asset for one-click comparison |
 | **Portfolio comparison** | Compare multiple assets side-by-side given an investment amount — ranked leaderboard |
 | **Risk metrics** | Stop-loss, take-profit, risk-reward ratio, max drawdown, volatility regime per recommendation |
 | **Action plan parameters** | User-configurable horizon, TP%, SL%, min expected return, risk-aversion λ, and investment amount in the sidebar |
 | **Asset catalog** | Centralised metadata (type, currency, volatility, descriptions) for every supported ticker |
-| **168 pytest tests** | Comprehensive coverage across 13 test modules including integration smoke tests |
+| **247 pytest tests** | Comprehensive coverage across 18 test modules including integration smoke tests |
 
 ---
 
@@ -59,7 +67,7 @@ evaluate performance, and follow a built-in tutorial — all from the browser.
 - **Model Registry** — Persistent save/load with scaler, metadata, and architecture info
 - **Diagnostics** — Automatic loss-curve analysis with verdict, suggestions, and **Apply Suggestions** button that auto-tunes hyperparameters
 - **Loss Chart Markers** — Best-epoch vertical line and overfitting zone shading on training plots
-- **Streamlit GUI** — 8 tabs, i18n EN/ES, interactive Plotly charts
+- **Streamlit GUI** — 13 tabs, Spanish-first i18n (EN/ES), guided onboarding, Data Hub, interactive Plotly charts
 
 ---
 
@@ -87,13 +95,19 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-1. **📊 Data** — Load historical prices for GLD, SLV, BTC-USD, or PALL
-2. **🔧 Train** — Pick architecture (GRU / LSTM / TCN), forecast steps, quantiles, and hyperparameters → train or fine-tune
-3. **🔮 Forecast** — View fan-chart trajectories with P10/P50/P90 uncertainty bands
-4. **💡 Recommendation** — Generate time-based action plans with BUY / HOLD / SELL / AVOID per-day classification, entry-window detection, scenario analysis, and interactive chart
-5. **📉 Evaluation** — Trajectory metrics + quantile calibration analysis
-6. **⚖️ Compare** — Compare multiple assets side-by-side for a given investment amount
-7. **📚 Tutorial** — Built-in guide covering architectures, forecasting, and interpretation
+1. **📊 Dashboard** — Decision-first landing page: all assets at a glance, leaderboard, top recommendation
+2. **📁 Data** — Load historical prices for GLD, SLV, BTC-USD, or PALL
+3. **🏋️ Train** — Pick architecture (GRU / LSTM / TCN), forecast steps, quantiles, and hyperparameters → train or fine-tune
+4. **🗂️ Models** — Manage saved models: rename, delete, assign primary per asset
+5. **📈 Forecast** — View fan-chart trajectories with P10/P50/P90 uncertainty bands
+6. **🎯 Recommendation** — Generate time-based action plans with BUY / HOLD / SELL / AVOID per-day classification, entry-window detection, scenario analysis, and interactive chart
+7. **📊 Evaluation** — Trajectory metrics + quantile calibration analysis
+8. **⚖️ Compare** — Compare multiple assets side-by-side for a given investment amount
+9. **💼 Portfolio** — Trade log with predicted vs actual outcome tracking
+10. **🩺 Health** — Model staleness, accuracy monitoring, recalibration advice
+11. **🔬 Backtest** — Walk-forward out-of-sample backtesting
+12. **🗄️ Data Hub** — Inspect, export (CSV/JSON/ZIP), and manage all persisted data
+13. **📚 Tutorial** — Built-in guide + restart guided onboarding
 
 ### CLI example
 
@@ -172,7 +186,7 @@ gld-price-prediction-dl/
 │   │   │                           #   DecisionConfig, AppConfig, SUPPORTED_ASSETS
 │   │   └── assets.py               # AssetInfo, ASSET_CATALOG (centralised metadata)
 │   ├── i18n/
-│   │   └── __init__.py             # STRINGS, LANGUAGES (EN / ES)
+│   │   └── __init__.py             # STRINGS, LANGUAGES (ES / EN), DEFAULT_LANGUAGE="es"
 │   ├── data/
 │   │   └── loader.py               # AssetDataLoader (yfinance)
 │   ├── features/
@@ -194,19 +208,38 @@ gld-price-prediction-dl/
 │   │   ├── engine.py               # DecisionEngine, Recommendation, RiskMetrics
 │   │   ├── scenario_analyzer.py    # ScenarioAnalysis, ScenarioOutcome, analyze_scenarios
 │   │   ├── action_planner.py       # ActionPlan, DayRecommendation, build_action_plan
-│   │   ├── trade_plan.py           # Re-export bridge (backward compat)
 │   │   └── portfolio.py            # PortfolioComparator, AssetOutcome, ComparisonResult
+│   ├── core/policy/
+│   │   └── scoring.py              # DecisionPolicy — transparent scoring wrapper
+│   ├── storage/
+│   │   └── trade_log.py            # JSONL-based trade log persistence
+│   ├── services/
+│   │   ├── health_service.py       # Model health monitoring
+│   │   └── backtest_engine.py      # Walk-forward backtesting engine
 │   └── app/
+│       ├── components/
+│       │   ├── forecast_cache.py    # In-memory forecast cache with TTL
+│       │   ├── empty_states.py     # Guided empty-state UI components
+│       │   └── onboarding.py       # Guided 8-step onboarding tutorial
 │       ├── controllers/
-│       │   ├── trade_plan_controller.py  # Action plan generation + JSON persistence
-│       │   ├── model_loader.py          # Load model bundles from registry
-│       │   └── ...                      # Other controllers
+│       │   └── dashboard_controller.py  # Dashboard analysis engine
 │       ├── ui/
-│       │   ├── sidebar.py               # Sidebar with action plan parameters
-│       │   ├── tabs_recommendation.py   # Action plan UI
-│       │   └── ...                      # Other tab modules
+│       │   ├── sidebar.py               # Sidebar with language + action plan params
+│       │   ├── tabs_dashboard.py        # 📊 Dashboard (landing page)
+│       │   ├── tabs_data.py             # 📁 Data loading
+│       │   ├── tabs_train.py            # 🏋️ Training
+│       │   ├── tabs_models.py           # 🗂️ Model management
+│       │   ├── tabs_forecast.py         # 📈 Fan chart forecast
+│       │   ├── tabs_recommendation.py   # 🎯 Recommendation + action plan
+│       │   ├── tabs_evaluation.py       # 📊 Evaluation metrics
+│       │   ├── tabs_compare.py          # ⚖️ Asset comparison
+│       │   ├── tabs_portfolio.py        # 💼 Portfolio / trade log
+│       │   ├── tabs_health.py           # 🩺 Model health
+│       │   ├── tabs_backtest.py         # 🔬 Walk-forward backtesting
+│       │   ├── tabs_datahub.py          # 🗄️ Data Hub (inspect/export/manage)
+│       │   └── tabs_tutorial.py         # 📚 Tutorial + onboarding restart
 │       ├── plots.py                # Fan chart & loss chart helpers
-│       └── streamlit_app.py        # 8-tab Streamlit GUI
+│       └── streamlit_app.py        # 13-tab Streamlit GUI (Spanish-first)
 │
 ├── tests/
 │   ├── conftest.py                 # Shared fixtures & seeds
@@ -221,7 +254,13 @@ gld-price-prediction-dl/
 │   ├── test_trade_plan.py          # Action plan & scenario analysis (40 tests)
 │   ├── test_catalog.py             # Asset catalog & metadata (8 tests)
 │   ├── test_assignments.py         # Model assignments persistence (9 tests)
-│   └── test_portfolio.py           # Portfolio comparison & risk metrics (21 tests)
+│   ├── test_portfolio.py           # Portfolio comparison & risk metrics (21 tests)
+│   ├── test_model_bundle.py        # ModelBundle predict, load_bundle (11 tests)
+│   ├── test_forecast_cache.py      # ForecastCache TTL, invalidation (13 tests)
+│   ├── test_decision_policy.py     # DecisionPolicy scoring factors (13 tests)
+│   ├── test_trade_log.py           # TradeLogStore JSONL persistence (13 tests)
+│   ├── test_health_service.py      # HealthService staleness, accuracy (23 tests)
+│   └── test_backtest_engine.py     # BacktestEngine walk-forward (17 tests)
 │
 ├── scripts/
 │   └── example.py                  # CLI demo
@@ -402,7 +441,7 @@ The label is stored in metadata and displayed throughout the UI, making it easy 
 ## Testing
 
 ```bash
-# Run all 143 tests
+# Run all 247 tests
 pytest
 
 # Verbose output

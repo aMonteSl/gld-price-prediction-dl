@@ -43,6 +43,8 @@ KEY_COMPARE_RESULT = "compare_result"
 
 # UI
 KEY_LANGUAGE = "language"
+KEY_TUTORIAL_DONE = "tutorial_done"
+KEY_ONBOARDING_STEP = "onboarding_step"
 
 
 # ── Defaults ─────────────────────────────────────────────────────────────
@@ -65,6 +67,9 @@ _DEFAULTS: Dict[str, Any] = {
     KEY_ACTIVE_MODEL: None,
     KEY_ACTIVE_MODEL_ID: None,
     KEY_COMPARE_RESULT: None,
+    KEY_LANGUAGE: "es",
+    KEY_TUTORIAL_DONE: False,
+    KEY_ONBOARDING_STEP: 0,
 }
 
 

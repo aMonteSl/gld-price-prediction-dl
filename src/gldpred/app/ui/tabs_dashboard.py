@@ -84,10 +84,7 @@ def render(t: Dict[str, str]) -> None:
 
     result: DashboardResult | None = st.session_state.get("_dashboard_result")
     if result is None:
-        st.info(
-            "Press **" + t["dash_run_analysis"]
-            + "** to analyze all available assets."
-        )
+        st.info(t["dash_click_run"])
         return
 
     if not result.items:
@@ -143,7 +140,7 @@ def _render_hero_card(item: DashboardAssetResult, t: Dict, inv: float) -> None:
         t["dash_pnl"],
         f"{pnl_sign}${item.pnl_median:,.2f}",
     )
-    mc4.metric("Model", item.model_label)
+    mc4.metric(t["dash_model_label"], item.model_label)
 
     info_cols = st.columns(2)
     if item.entry_window:
@@ -200,4 +197,4 @@ def _render_asset_expander(
         if item.plan and item.plan.narrative:
             st.markdown(f"*{item.plan.narrative}*")
 
-        st.caption(f"Model: {item.model_label}")
+        st.caption(f"{t['dash_model_label']}: {item.model_label}")
