@@ -60,6 +60,7 @@ class DecisionConfig:
 class AppConfig:
     """Top-level configuration aggregating all sub-configs."""
 
+    page_title: str = "Multi-Asset Price Forecasting"
     data: DataConfig = field(default_factory=DataConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)

@@ -29,9 +29,12 @@ metrics** (stop-loss, take-profit, risk-reward ratio, max drawdown), and
 A **portfolio comparison engine** ranks multiple assets side-by-side for a
 given investment amount, producing a leaderboard of expected outcomes.
 
-A **Streamlit** GUI provides interactive data exploration, training,
+A **Streamlit** GUI provides interactive data exploration (auto-loaded),
+training, **model management** (rename, delete, assign primary),
 forecasting, recommendation, evaluation, asset comparison, and a built-in
-tutorial — all fully internationalised in **English and Spanish**.
+tutorial — all fully internationalised in **English and Spanish**. An
+**educational glossary** with 25 bilingual terms provides context-sensitive
+help via popover components throughout the interface.
 
 ---
 
@@ -88,19 +91,27 @@ gld-price-prediction-dl/
 │   │
 │   ├── registry/
 │   │   ├── __init__.py
-│   │   ├── store.py              # ModelRegistry (save / load / list / delete)
+│   │   ├── store.py              # ModelRegistry, ModelBundle (save / load / list / delete / rename / load_bundle)
 │   │   └── assignments.py        # ModelAssignments (primary model per asset)
 │   │
 │   ├── decision/
 │   │   ├── __init__.py
 │   │   ├── engine.py             # DecisionEngine, Recommendation, RiskMetrics,
 │   │   │                         #   RecommendationHistory (BUY/HOLD/AVOID)
+│   │   ├── scenario_analyzer.py  # ScenarioAnalysis, ScenarioOutcome, analyze_scenarios
+│   │   ├── action_planner.py     # ActionPlan, DayRecommendation, EntryWindow,
+│   │   │                         #   ExitPoint, DecisionRationale, build_action_plan
+│   │   ├── trade_plan.py         # Re-export bridge (backward compat)
 │   │   └── portfolio.py          # PortfolioComparator, AssetOutcome, ComparisonResult
 │   │
 │   └── app/
 │       ├── __init__.py
+│       ├── state.py              # Centralised session-state keys & helpers
+│       ├── data_controller.py    # Cached data loading (@st.cache_data)
+│       ├── glossary.py           # Educational glossary + info_term() popover
+│       ├── compare_controller.py # Compare-tab orchestration
 │       ├── plots.py              # Fan chart & loss chart plot helpers
-│       └── streamlit_app.py      # 7-tab Streamlit GUI
+│       └── streamlit_app.py      # 8-tab Streamlit GUI
 │
 ├── scripts/
 │   └── example.py                # CLI example script
@@ -116,7 +127,8 @@ gld-price-prediction-dl/
 │   ├── test_decision.py          # DecisionEngine & Recommendation
 │   ├── test_catalog.py           # Asset catalog & metadata
 │   ├── test_assignments.py       # Model assignments persistence
-│   └── test_portfolio.py         # Portfolio comparison & risk metrics
+│   ├── test_portfolio.py         # Portfolio comparison & risk metrics
+│   └── test_trade_plan.py        # Action plan & scenario analysis (40 tests)
 │
 └── data/model_registry/          # Saved model artifacts (git-ignored)
 ```
@@ -135,10 +147,14 @@ gld-price-prediction-dl/
 | `gldpred.evaluation` | `ModelEvaluator` | Trajectory metrics (`evaluate_trajectory`) and quantile calibration (`evaluate_quantiles`) |
 | `gldpred.inference` | `TrajectoryPredictor`, `TrajectoryForecast` | Price-path reconstruction from return forecasts + signal generation |
 | `gldpred.diagnostics` | `DiagnosticsAnalyzer` | Heuristic loss-curve analysis (verdict + suggestions) |
-| `gldpred.registry` | `ModelRegistry`, `ModelAssignments` | Persist, load, list, and delete trained model artifacts; assign primary model per asset |
-| `gldpred.decision` | `DecisionEngine`, `Recommendation`, `RiskMetrics`, `RecommendationHistory`, `PortfolioComparator` | Convert forecast trajectories into BUY / HOLD / AVOID with confidence, risk metrics, regime detection; portfolio comparison |
+| `gldpred.registry` | `ModelRegistry`, `ModelBundle`, `ModelAssignments` | Persist, load, list, delete, and rename trained model artifacts; `load_bundle()` for registry-backed inference; assign primary model per asset |
+| `gldpred.decision` | `DecisionEngine`, `Recommendation`, `RiskMetrics`, `RecommendationHistory`, `PortfolioComparator`, `ActionPlan`, `DayRecommendation`, `EntryWindow`, `ExitPoint`, `DecisionRationale`, `ScenarioAnalysis`, `ScenarioOutcome`, `build_action_plan`, `summarize_action_plan`, `analyze_scenarios` | Convert forecast trajectories into BUY / HOLD / AVOID with confidence, risk metrics, regime detection; portfolio comparison; time-based action plans with BUY / HOLD / SELL / AVOID per-day classification, entry-window detection, scenario analysis |
 | `gldpred.i18n` | `STRINGS`, `LANGUAGES` | Dictionary-based i18n (English / Spanish) |
-| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 7 tabs |
+| `gldpred.app.state` | `init_state`, `get`, `put`, `clear_training_state`, `clear_data_state`, `KEY_*` | Centralised session-state keys, defaults, and helpers |
+| `gldpred.app.data_controller` | `LoadedData`, `fetch_asset_data`, `invalidate_cache` | Cached data loading via `@st.cache_data` (1-hour TTL) |
+| `gldpred.app.glossary` | `GlossaryEntry`, `GLOSSARY`, `info_term` | Educational glossary with 25 bilingual terms + popover component |
+| `gldpred.app.compare_controller` | `CompareRow`, `run_comparison`, `available_models_for_asset` | Compare-tab orchestration: per-row asset+model selection, comparison pipeline |
+| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 8 tabs |
 | `gldpred.app.plots` | `create_loss_chart`, `create_fan_chart` | Plotly chart helpers (loss chart with best-epoch markers, fan chart) |
 
 ### Model classes (all in `gldpred.models`)
@@ -224,7 +240,7 @@ pip install -r requirements.txt
 # Run the Streamlit app
 streamlit run app.py
 
-# Run tests (pytest — 78 tests across 8 files)
+# Run tests (pytest — 168 tests across 13 files)
 pytest
 pytest -v                       # verbose
 pytest tests/test_models.py     # single module
@@ -311,7 +327,7 @@ These are strictly off-limits unless explicitly requested:
 Run the test suite with:
 
 ```bash
-# pytest (116 tests across 11 files)
+# pytest (168 tests across 13 files)
 pytest
 pytest -v                       # verbose
 pytest tests/test_models.py     # single module
@@ -332,6 +348,8 @@ pytest tests/test_models.py     # single module
 | `tests/test_catalog.py` | Asset catalog metadata, AssetInfo, ASSET_CATALOG |
 | `tests/test_assignments.py` | ModelAssignments persistence, assign/unassign |
 | `tests/test_portfolio.py` | RiskMetrics, regime detection, PortfolioComparator |
+| `tests/test_trade_plan.py` | Action plan & scenario analysis: day classification, entry window, exit, scenarios, narrative, edge cases |
+| `tests/test_model_bundle.py` | ModelBundle predict, load_bundle roundtrip, weight preservation |
 | `tests/test_integration.py` | End-to-end pipeline smoke tests (all architectures) |
 
 When adding new functionality, add corresponding parametric tests.
@@ -361,3 +379,4 @@ reproducible seeds and synthetic data.
 | Missing `AssetInfo` for new ticker | Every asset in `SUPPORTED_ASSETS` must have a matching entry in `ASSET_CATALOG` (`config/assets.py`) |
 | Ignoring `RiskMetrics` in tests | New decision-engine tests should verify `rec.risk` fields (stop_loss_pct, take_profit_pct, etc.) |
 | Skipping model assignment | The Compare tab requires at least one asset with an assigned primary model via `ModelAssignments` |
+| Using `KEY_TRAINER` for inference | Forecast / Recommendation / Evaluation tabs use `ModelBundle` via `get_active_model()` — never read `KEY_TRAINER` outside the training tab |

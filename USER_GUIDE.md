@@ -16,7 +16,7 @@
 5. [Configurable Parameters Explained](#5-configurable-parameters-explained)
 6. [Training: What Happens When You Click "Train"](#6-training-what-happens-when-you-click-train)
 7. [Forecasting: Fan Charts & Uncertainty](#7-forecasting-fan-charts--uncertainty)
-8. [Recommendations: BUY / HOLD / AVOID](#8-recommendations-buy--hold--avoid)
+8. [Action Plan: Time-Based Recommendations](#8-action-plan-time-based-recommendations)
 9. [Evaluation: Understanding the Metrics](#9-evaluation-understanding-the-metrics)
 10. [Model Registry: Saving & Loading Models](#10-model-registry-saving--loading-models)
 11. [Asset Comparison: Portfolio View](#11-asset-comparison-portfolio-view)
@@ -50,7 +50,7 @@ The app has **seven tabs**, each representing a step in the workflow:
 | **📊 Data** | Download and explore historical prices for any supported asset |
 | **🔧 Train** | Configure and train a neural network (new or fine-tune) |
 | **🔮 Forecast** | View fan-chart trajectories with P10/P50/P90 uncertainty bands |
-| **💡 Recommendation** | Get BUY / HOLD / AVOID decisions with confidence, risk metrics, and regime detection |
+| **💡 Recommendation** | Generate time-based action plans with BUY / HOLD / SELL / AVOID per-day classification, entry-window detection, scenario analysis, and interactive chart |
 | **📉 Evaluation** | Trajectory metrics + quantile calibration analysis |
 | **⚖️ Compare** | Compare multiple assets side-by-side for a given investment amount |
 | **📚 Tutorial** | Built-in guide (this content is also in the app) |
@@ -492,98 +492,134 @@ and P90 prices for each forecast step.
 
 ---
 
-## 8. Recommendations: BUY / HOLD / AVOID
+## 8. Action Plan: Time-Based Recommendations
 
-### How the Decision Engine works
+### What is an Action Plan?
 
-The **Recommendation tab** converts the forecast trajectory into an actionable
-signal: **BUY**, **HOLD**, or **AVOID**.
+Instead of a single BUY / HOLD / AVOID signal, the **Recommendation tab**
+generates a **time-based action plan** — a per-day classification that tells
+you exactly what to do on each forecast day, based on the model's quantile
+trajectory forecast.
 
-The decision engine scores multiple factors on a 0–100 scale:
+An action plan answers four questions:
+1. **When should I enter?** (entry window — a range of favourable days)
+2. **What should I do each day?** (BUY / HOLD / SELL / AVOID)
+3. **When should I exit?** (optimal exit day, or TP/SL trigger)
+4. **What are the possible outcomes?** (three-scenario analysis with $-value impact)
 
-| Factor | What it measures | Impact |
-|--------|-----------------|--------|
-| **Expected return** | P50 median return over the decision horizon | ±20 points |
-| **Uncertainty width** | Distance between P10 and P90 | −5 to −10 points if too wide |
-| **Trend filter** | Price relative to SMA50 and SMA200 | ±5 to ±15 points |
-| **Volatility filter** | ATR% relative to asset-specific threshold | −5 to −10 points if too high |
-| **Diagnostics gate** | Was the model training healthy? | −5 to −10 points if unhealthy |
+### How the Action Plan is built
 
-### Decision Thresholds
+The plan uses the **price paths** from the trajectory forecast — the P10
+(pessimistic), P50 (median), and P90 (optimistic) projected prices over K
+forecast steps.
 
-| Confidence Score | Signal |
-|-----------------|--------|
-| ≥ 65 | **BUY** — Strong upward expectation with manageable risk |
-| 36–64 | **HOLD** — Mixed signals; insufficient edge |
-| ≤ 35 | **AVOID** — Negative expectation or excessive uncertainty |
+#### Step 1 — Per-Day Classification (State Machine)
 
-### Reading the Recommendation Card
+Each day is classified using a state-machine approach:
 
-The recommendation card shows:
+| State | Action | Condition |
+|-------|--------|-----------|
+| **NO_POSITION** | **BUY** | Score > 0, positive return, improving outlook, acceptable downside |
+| **NO_POSITION** | **AVOID** | Negative return, excessive risk, or conditions not favourable |
+| **POSITIONED** | **HOLD** | Within risk limits — no TP/SL trigger, score not declining sharply |
+| **POSITIONED** | **SELL** | Take-profit hit, stop-loss breached, or momentum fading significantly |
+| **CLOSED** | **AVOID** | Position already exited — no further action |
 
-- **Signal** — BUY (green), HOLD (yellow), or AVOID (red)
-- **Confidence** — 0–100 score
-- **Rationale** — human-readable explanation of the main factors
-- **Warnings** — specific risk factors (e.g., "High ATR% volatility",
-  "Model diagnostics indicate overfitting")
+Transitions: NO_POSITION → BUY → POSITIONED → SELL → CLOSED → AVOID.
+This guarantees a coherent narrative (no BUY after SELL, no HOLD before entry).
 
-### Risk Metrics
+#### Step 2 — Entry Window Detection
 
-Every recommendation now includes a **Risk Metrics** panel:
+The **entry window** is the best contiguous range of BUY-classified days,
+ranked by average **risk-adjusted score**:
 
-| Metric | Meaning |
-|--------|---------|
-| **Stop-Loss %** | Suggested stop-loss distance based on P10 downside. Always negative |
-| **Take-Profit %** | Suggested take-profit target based on P90 upside. Always positive |
-| **Risk-Reward Ratio** | Take-profit / |stop-loss|. Values above 1.0 are favourable |
-| **Max Drawdown %** | Worst-case peak-to-trough drawdown along the P10 trajectory |
-| **Volatility Regime** | Current market regime label (see below) |
+$$\text{score}(t) = r_{50}(t) - \lambda \cdot \max(0,\; -r_{10}(t))$$
 
-### Market Regime Detection
+#### Step 3 — Optimal Exit
 
-The decision engine automatically classifies the asset's market regime:
+The **best exit day** maximises the same risk-adjusted score:
 
-| Regime | Condition | Typical Action |
-|--------|-----------|---------------|
-| **Trending Up** | SMA50 > SMA200 and short-term momentum positive | Supports BUY signals |
-| **Trending Down** | SMA50 < SMA200 and short-term momentum negative | Supports AVOID signals |
-| **Ranging** | SMAs close together, no clear trend | Favours HOLD |
-| **High Volatility** | ATR% above asset threshold | Warns of elevated risk |
+$$\text{best\_exit} = \arg\max_t \left[ r_{50}(t) - \lambda \cdot \max(0,\; -r_{10}(t)) \right]$$
 
-The regime label is displayed prominently in the recommendation card.
+#### Step 4 — Scenario Analysis
 
-### Conflicting-Signal Warnings
+Three scenarios are computed from the quantile forecast:
 
-The engine checks whether the **forecast direction** (positive or negative P50
-return) contradicts the **market regime**:
+| Scenario | Quantile | Provides |
+|----------|----------|----------|
+| **Optimistic** | P90 | Best-case return %, final price, P&L on investment |
+| **Base** | P50 | Median projection |
+| **Pessimistic** | P10 | Worst-case drawdown |
 
-- A positive forecast in a trending-down market triggers a warning
-- A negative forecast in a trending-up market triggers a warning
+#### Step 5 — Decision Rationale
 
-These conflicting signals reduce the confidence score and add explicit
-warnings to the recommendation.
+Four factors explain the recommendation:
 
-### Recommendation History
+1. **Trend confirmation** — SMA-50 vs SMA-200 relationship (bullish / bearish / mixed)
+2. **Volatility regime** — ATR% classification (low / normal / high)
+3. **Quantile risk assessment** — P10 drawdown relative to stop-loss threshold
+4. **Today's assessment** — Whether today falls within the optimal entry window
 
-All recommendations generated during a session are automatically saved.
-The **Recommendation History** panel at the bottom of the Recommendation tab
-shows a chronological log:
+### Sidebar Parameters
 
-- Filter by asset ticker
-- View timestamp, action, confidence, and rationale for each entry
-- Clear the history with a single click
+All settings are in the sidebar under **Action Plan Settings**:
+
+| Parameter | Range | Default | Effect |
+|-----------|-------|---------|--------|
+| **Horizon** | 1–60 days | 10 | How many days the plan covers (clamped to forecast length) |
+| **Take-Profit %** | 0.5–50 | 5.0 | Cumulative P50 return that triggers SELL |
+| **Stop-Loss %** | 0.5–50 | 3.0 | P10 drawdown that triggers SELL |
+| **Min Expected Return %** | 0–50 | 1.0 | Minimum median return for favourable outlook |
+| **Risk Aversion (λ)** | 0.0–2.0 | 0.5 | Downside penalty in scoring. 0 = risk-neutral, 2 = conservative |
+| **Investment ($)** | 100–1 000 000 | 10 000 | Hypothetical amount for scenario value-impact calculations |
+
+### Reading the Action Plan UI
+
+After clicking **Generate Action Plan**, the tab shows:
+
+1. **Overall signal badge** — 🟢 BUY, 🟡 HOLD, 🔴 SELL, or ⚫ AVOID with
+   a confidence score and a one-line narrative summary
+   (e.g. *"Buy today → hold 5 days → sell on day 6"*).
+
+2. **Decision rationale** — Expandable section with four factors: trend
+   confirmation, volatility regime, quantile risk assessment, and today's
+   assessment.
+
+3. **Scenario analysis** — Three cards (Pessimistic / Base / Optimistic)
+   showing return %, final price, and P&L on the configured investment.
+
+4. **Entry & exit optimisation** — Entry window (range of favourable days
+   with average risk score) and best exit day (with expected return % and
+   risk score).
+
+5. **Daily action timeline** — Colour-coded horizontal bar: green (BUY),
+   yellow (HOLD), red (SELL), grey (AVOID). Each day is expandable to view
+   price level, return, risk score, and rationale.
+
+6. **Price trajectory chart** — Plotly chart with:
+   - P10/P50/P90 uncertainty bands
+   - Entry price, TP, and SL horizontal lines
+   - Green shading over the entry window
+   - ⭐ marker on the best exit day
+   - ✕ markers on SELL trigger days
+
+### Plan Persistence
+
+Every generated plan is saved as a JSON file in `data/trade_plans/` with the
+format `plan_{ASSET}_{timestamp}.json`. This allows you to review plans
+offline or compare across sessions.
 
 ### Important Disclaimer
 
-The recommendation engine is a **decision-support tool**, not financial advice.
-It synthesises information from the model's output but cannot account for:
+The action plan is a **decision-support tool**, not financial advice. It
+synthesises information from the model's quantile output but cannot account
+for:
 - Breaking news or geopolitical events
 - Transaction costs and slippage
-- Your personal risk tolerance and investment horizon
+- Your personal risk tolerance and investment goals
 - Market microstructure and liquidity
 
-**Always do your own research** and use the recommendations as one input
-among many.
+**Always do your own research** and use the action plan as one input among many.
 
 ---
 
@@ -824,27 +860,28 @@ You can also **unassign** a model to remove it from comparison.
 > **Note:** These examples are purely educational illustrations. They do NOT
 > constitute financial advice.
 
-### Scenario A — Strong BUY signal
+### Scenario A — BUY signal with strong uptrend
 
-*"The model predicts GLD P50 increasing from $240 to $248 over 20 days. The
-P10–P90 band is narrow ($236–$252). Confidence: 78."*
+*"GLD action plan: 🟢 BUY (confidence 78%). Buy today → hold 5 days → sell on
+day 6. Entry window: days 1–3. Optimistic: +8.7% ($+870), Base: +3.4% ($+340),
+Pessimistic: −2.1% ($−210)."*
 
-**Interpretation:** The model sees a clear uptrend with manageable uncertainty.
-The narrow band suggests high conviction.
+**Interpretation:** The model sees a clear uptrend with a favourable entry
+window in the first 3 days. The best risk-adjusted exit is day 6.
 
 **What to check:**
 - Is the model well-trained? (Healthy diagnostics verdict)
 - Have quantile calibration metrics been reviewed?
 - Is there a macro event that the model cannot know about?
 
-### Scenario B — Wide uncertainty band
+### Scenario B — Wide uncertainty → AVOID
 
-*"The fan chart for BTC-USD shows P10 at $55,000 and P90 at $85,000 after 20
-days. P50 is at $70,000."*
+*"BTC-USD action plan: ⚫ AVOID (confidence 72%). Pessimistic scenario shows
+−8% drawdown, median return +0.3% below the 1% threshold. No entry window
+detected."*
 
-**Interpretation:** The model is highly uncertain. A $30,000 range means
-almost anything could happen. The recommendation will likely be **HOLD** due
-to excessive uncertainty width.
+**Interpretation:** The model is highly uncertain and the expected return is
+too low. The plan correctly recommends avoiding entry.
 
 **What to do:**
 - This is normal for BTC-USD — it's inherently more volatile.
@@ -864,14 +901,14 @@ climbing."*
 - Increase dropout (try 0.3).
 - Use a longer date range for more training data.
 
-### Scenario D — AVOID recommendation with low confidence
+### Scenario D — Stop-loss triggers SELL early
 
-*"Signal: AVOID. Confidence: 22. Warnings: High volatility (ATR% > threshold),
-model diagnostics indicate noisy training, negative expected return."*
+*"SLV action plan: 🟢 BUY. Buy on day 1 → hold → stop-loss SELL on day 3.
+Pessimistic return: −3.2%. Best exit: day 2."*
 
-**Interpretation:** Multiple negative factors are stacking up. The model's
-training was noisy (unreliable weights) and the asset is showing high
-volatility. This is a strong signal to stay on the sidelines.
+**Interpretation:** Although the median outlook is positive, the pessimistic
+scenario breaches the stop-loss on day 3. The risk-adjusted best exit is
+day 2 — exit before the potential drawdown materialises.
 
 ### Scenario E — Model always predicts flat returns
 
@@ -936,13 +973,25 @@ will improve its calibration with more data or longer training.
 | ⚠️ Underfitting | Both losses stay high | ↑ Capacity, ↑ Epochs |
 | ⚠️ Noisy | Val loss oscillates | ↓ Learning rate, ↑ Batch size |
 
-### Decision signals
+### Action plan signals
 
-| Signal | Confidence | Meaning |
-|--------|-----------|---------|
-| **BUY** | ≥ 65 | Strong upward expectation, manageable risk |
-| **HOLD** | 36–64 | Mixed signals, insufficient edge |
-| **AVOID** | ≤ 35 | Negative expectation or excessive uncertainty |
+| Signal | Meaning |
+|--------|---------|
+| **BUY** | Favourable entry point — positive outlook, acceptable risk |
+| **HOLD** | Maintain position — within risk limits |
+| **SELL** | Exit — take-profit, stop-loss, or declining momentum |
+| **AVOID** | Stay away — negative outlook, excessive risk, or position closed |
+
+### Action plan parameters
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| Horizon | 10 | Days in the plan |
+| Take-Profit % | 5.0 | SELL trigger (P50 return) |
+| Stop-Loss % | 3.0 | SELL trigger (P10 drawdown) |
+| Min Expected Return % | 1.0 | Minimum return for BUY signal |
+| Risk Aversion (λ) | 0.5 | Downside penalty in scoring |
+| Investment ($) | 10 000 | For scenario value-impact |
 
 ### Common adjustments
 

@@ -4,7 +4,9 @@ Deep-learning application for forecasting price movements of **multiple
 financial assets** using historical market data. Built with **PyTorch** and
 featuring **GRU, LSTM, and TCN** architectures, the system produces
 **probabilistic quantile trajectory forecasts** and converts them into
-actionable **BUY / HOLD / AVOID** recommendations.
+actionable **time-based action plans** with per-day BUY / HOLD / SELL / AVOID
+classifications, entry-window detection, optimal exit selection,
+three-scenario analysis (P10/P50/P90), and multi-factor decision rationale.
 
 Supported assets: **GLD** (Gold ETF), **SLV** (Silver ETF), **BTC-USD**
 (Bitcoin), **PALL** (Palladium ETF).
@@ -25,18 +27,16 @@ evaluate performance, and follow a built-in tutorial — all from the browser.
 | **Pinball (quantile) loss** | Unified loss function replacing MSE/BCE — no regression/classification split |
 | **Fan-chart visualisation** | Plotly fan charts showing P10–P90 uncertainty bands around the median forecast |
 | **Model registry** | Save, load, list, and delete trained models with metadata and scaler persistence |
-| **Decision engine** | Converts trajectories into BUY / HOLD / AVOID recommendations with confidence scores |
+| **Action plan engine** | Converts trajectories into BUY / HOLD / SELL / AVOID action plans with entry-window detection, optimal exit selection, three-scenario analysis, and multi-factor decision rationale |
 | **Fine-tuning** | Resume training from a saved model checkpoint |
 | **30+ features** | Expanded technical indicators including ATR%, price-to-SMA ratios, and more |
-| **7-tab Streamlit GUI** | Data · Train · Forecast · Recommendation · Evaluation · Compare · Tutorial |
+| **8-tab Streamlit GUI** | Data · Train · Models · Forecast · Recommendation · Evaluation · Compare · Tutorial |
 | **Asset model assignment** | Assign a primary model to each asset for one-click comparison |
 | **Portfolio comparison** | Compare multiple assets side-by-side given an investment amount — ranked leaderboard |
 | **Risk metrics** | Stop-loss, take-profit, risk-reward ratio, max drawdown, volatility regime per recommendation |
-| **Market regime detection** | Automatic detection of trending-up / trending-down / ranging / high-volatility regimes |
-| **Recommendation history** | Session-scoped history of all recommendations with filtering |
-| **Conflicting-signal warnings** | Detects when forecast direction contradicts the trend regime |
+| **Action plan parameters** | User-configurable horizon, TP%, SL%, min expected return, risk-aversion λ, and investment amount in the sidebar |
 | **Asset catalog** | Centralised metadata (type, currency, volatility, descriptions) for every supported ticker |
-| **116 pytest tests** | Comprehensive coverage across 11 test modules including integration smoke tests |
+| **168 pytest tests** | Comprehensive coverage across 13 test modules including integration smoke tests |
 
 ---
 
@@ -50,16 +50,16 @@ evaluate performance, and follow a built-in tutorial — all from the browser.
   - Configurable forecast horizon and quantile levels
 - **Training Pipeline** — StandardScaler, temporal 80/20 split, Adam, pinball loss, fine-tuning
 - **Inference** — Multi-step price trajectories with uncertainty bands
-- **Decision Engine** — BUY / HOLD / AVOID recommendations with confidence scoring, risk metrics, and market regime detection
+- **Action Plan Engine** — BUY / HOLD / SELL / AVOID per-day classification with entry-window detection, optimal exit selection, three-scenario analysis (P10/P50/P90 with value impact), and multi-factor decision rationale
 - **Portfolio Comparison** — Compare multiple assets for a given investment amount with a ranked leaderboard
 - **Risk Metrics** — Stop-loss, take-profit, risk-reward ratio, max drawdown, and volatility regime per recommendation
+- **Action Plan Parameters** — User-configurable horizon, TP%, SL%, min expected return, risk-aversion λ, and investment amount
 - **Asset Model Assignment** — Assign a primary trained model to each asset for streamlined comparison
-- **Recommendation History** — Session-scoped log of all recommendations with per-asset filtering
 - **Evaluation** — Trajectory metrics (MSE, RMSE, MAE, directional accuracy) + quantile calibration
 - **Model Registry** — Persistent save/load with scaler, metadata, and architecture info
 - **Diagnostics** — Automatic loss-curve analysis with verdict, suggestions, and **Apply Suggestions** button that auto-tunes hyperparameters
 - **Loss Chart Markers** — Best-epoch vertical line and overfitting zone shading on training plots
-- **Streamlit GUI** — 7 tabs, i18n EN/ES, interactive Plotly charts
+- **Streamlit GUI** — 8 tabs, i18n EN/ES, interactive Plotly charts
 
 ---
 
@@ -90,7 +90,7 @@ streamlit run app.py
 1. **📊 Data** — Load historical prices for GLD, SLV, BTC-USD, or PALL
 2. **🔧 Train** — Pick architecture (GRU / LSTM / TCN), forecast steps, quantiles, and hyperparameters → train or fine-tune
 3. **🔮 Forecast** — View fan-chart trajectories with P10/P50/P90 uncertainty bands
-4. **💡 Recommendation** — Get BUY / HOLD / AVOID decisions with confidence, risk metrics, and regime detection
+4. **💡 Recommendation** — Generate time-based action plans with BUY / HOLD / SELL / AVOID per-day classification, entry-window detection, scenario analysis, and interactive chart
 5. **📉 Evaluation** — Trajectory metrics + quantile calibration analysis
 6. **⚖️ Compare** — Compare multiple assets side-by-side for a given investment amount
 7. **📚 Tutorial** — Built-in guide covering architectures, forecasting, and interpretation
@@ -192,10 +192,21 @@ gld-price-prediction-dl/
 │   │   └── assignments.py          # ModelAssignments (primary model per asset)
 │   ├── decision/
 │   │   ├── engine.py               # DecisionEngine, Recommendation, RiskMetrics
+│   │   ├── scenario_analyzer.py    # ScenarioAnalysis, ScenarioOutcome, analyze_scenarios
+│   │   ├── action_planner.py       # ActionPlan, DayRecommendation, build_action_plan
+│   │   ├── trade_plan.py           # Re-export bridge (backward compat)
 │   │   └── portfolio.py            # PortfolioComparator, AssetOutcome, ComparisonResult
 │   └── app/
+│       ├── controllers/
+│       │   ├── trade_plan_controller.py  # Action plan generation + JSON persistence
+│       │   ├── model_loader.py          # Load model bundles from registry
+│       │   └── ...                      # Other controllers
+│       ├── ui/
+│       │   ├── sidebar.py               # Sidebar with action plan parameters
+│       │   ├── tabs_recommendation.py   # Action plan UI
+│       │   └── ...                      # Other tab modules
 │       ├── plots.py                # Fan chart & loss chart helpers
-│       └── streamlit_app.py        # 7-tab Streamlit GUI
+│       └── streamlit_app.py        # 8-tab Streamlit GUI
 │
 ├── tests/
 │   ├── conftest.py                 # Shared fixtures & seeds
@@ -207,6 +218,7 @@ gld-price-prediction-dl/
 │   ├── test_features.py            # Feature engineering & sequences (7 tests)
 │   ├── test_registry.py            # ModelRegistry persistence (13 tests)
 │   ├── test_decision.py            # DecisionEngine recommendations (9 tests)
+│   ├── test_trade_plan.py          # Action plan & scenario analysis (40 tests)
 │   ├── test_catalog.py             # Asset catalog & metadata (8 tests)
 │   ├── test_assignments.py         # Model assignments persistence (9 tests)
 │   └── test_portfolio.py           # Portfolio comparison & risk metrics (21 tests)
@@ -242,22 +254,66 @@ classification / multi-task split.
 
 ---
 
-## Decision Engine
+## Action Plan Engine
 
-The `DecisionEngine` converts forecast trajectories into actionable signals:
+The **Recommendation tab** uses `build_action_plan()` to convert a quantile
+trajectory forecast into a **time-based action plan** — a per-day action
+schedule with entry-window detection, optimal exit selection, scenario analysis,
+and multi-factor decision rationale.
 
-| Signal | Meaning |
+### Per-Day Classification
+
+Each day is classified using a **state-machine** approach
+(NO_POSITION → BUY → POSITIONED → SELL → CLOSED):
+
+| Action | Meaning |
 |--------|---------|
-| **BUY** | Strong upward expected return with acceptable uncertainty |
-| **HOLD** | Mixed signals or insufficient edge |
-| **AVOID** | Negative expected return or excessive volatility |
+| **BUY** | Favourable entry point — positive outlook with acceptable risk |
+| **HOLD** | Maintain position — within risk limits |
+| **SELL** | Exit position — take-profit, stop-loss, or declining momentum |
+| **AVOID** | Stay away — negative outlook, excessive risk, or position already closed |
 
-Each recommendation includes:
-- **Confidence score** (0–100)
-- **Rationale** — human-readable explanation
-- **Warnings** — risk factors to consider- **Risk metrics** — stop-loss %, take-profit %, risk-reward ratio, max drawdown %, volatility regime
-- **Market regime** — trending-up, trending-down, ranging, or high-volatility
-- **Conflicting-signal detection** — warns when the forecast direction contradicts the market trend
+### Entry & Exit Optimisation
+
+| Output | Description |
+|--------|-------------|
+| **Entry window** | Best contiguous range of BUY-classified days (ranked by avg risk-adjusted score) |
+| **Best exit day** | `argmax[r_50(t) − λ · max(0, −r_10(t))]` — peak risk-adjusted return |
+
+### Scenario Analysis
+
+Three scenarios are computed from the quantile forecast:
+
+| Scenario | Quantile | Shows |
+|----------|----------|-------|
+| **Optimistic** | P90 | Best-case return, final price, P&L on investment |
+| **Base** | P50 | Median projection |
+| **Pessimistic** | P10 | Worst-case drawdown |
+
+### Decision Rationale
+
+Four factors explain the recommendation:
+
+1. **Trend confirmation** — SMA-50 vs SMA-200 (golden/death cross)
+2. **Volatility regime** — ATR% classification (low / normal / high)
+3. **Quantile risk** — P10 drawdown vs stop-loss threshold
+4. **Today's assessment** — Whether today falls within the optimal entry window
+
+### Sidebar Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| **Horizon** | 10 days | Number of forecast days in the plan (1–60) |
+| **Take-Profit %** | 5.0 | Cumulative P50 return that triggers SELL |
+| **Stop-Loss %** | 3.0 | P10 drawdown that triggers SELL |
+| **Min Expected Return %** | 1.0 | Minimum median return for favourable outlook |
+| **Risk Aversion (λ)** | 0.5 | Penalty weight on downside risk in scoring |
+| **Investment ($)** | 10 000 | Hypothetical amount for scenario value-impact |
+
+### Persistence
+
+Every generated plan is saved as a JSON file in `data/trade_plans/` with
+the format `plan_{ASSET}_{timestamp}.json`, enabling post-session review.
 
 ### Portfolio Comparison
 
@@ -268,11 +324,6 @@ The `PortfolioComparator` enables side-by-side comparison of multiple assets:
 3. The engine forecasts each asset, ranks them by median PnL, and presents a leaderboard
 
 Each `AssetOutcome` includes projected values at P10/P50/P90, PnL, and a full recommendation.
-
-### Recommendation History
-
-All recommendations generated in a session are recorded in `RecommendationHistory`,
-filterable by asset, and clearable from the UI.
 ---
 
 ## Model Registry
@@ -351,7 +402,7 @@ The label is stored in metadata and displayed throughout the UI, making it easy 
 ## Testing
 
 ```bash
-# Run all 116 tests
+# Run all 143 tests
 pytest
 
 # Verbose output

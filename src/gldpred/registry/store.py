@@ -9,9 +9,10 @@ import json
 import re
 import shutil
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import joblib
 import numpy as np
@@ -20,6 +21,60 @@ import torch.nn as nn
 
 DEFAULT_REGISTRY_DIR = Path("data") / "model_registry"
 MAX_LABEL_LENGTH = 60
+
+# Architecture name → class mapping (lazy import to avoid circular deps)
+_ARCH_MAP: Dict[str, Type[nn.Module]] | None = None
+
+
+def _get_arch_map() -> Dict[str, Type[nn.Module]]:
+    """Lazy-load architecture class map."""
+    global _ARCH_MAP
+    if _ARCH_MAP is None:
+        from gldpred.models import GRUForecaster, LSTMForecaster, TCNForecaster
+        _ARCH_MAP = {
+            "GRU": GRUForecaster,
+            "LSTM": LSTMForecaster,
+            "TCN": TCNForecaster,
+        }
+    return _ARCH_MAP
+
+
+@dataclass
+class ModelBundle:
+    """Everything needed to run inference with a saved model.
+
+    Provides a ``.predict(X)`` method compatible with ``TrajectoryPredictor``
+    so it can be used as a drop-in replacement for ``ModelTrainer``.
+    """
+    model: nn.Module
+    scaler: Any                     # fitted StandardScaler
+    metadata: Dict[str, Any]
+    model_id: str
+    label: str
+    asset: str
+    architecture: str
+    feature_names: List[str] = field(default_factory=list)
+    quantiles_tuple: Tuple[float, ...] = (0.1, 0.5, 0.9)
+    config: Dict[str, Any] = field(default_factory=dict)
+
+    # ── inference API (duck-typed with ModelTrainer) ──────────────
+    @property
+    def quantiles(self) -> Tuple[float, ...]:
+        return self.quantiles_tuple
+
+    @property
+    def device(self) -> torch.device:
+        return next(self.model.parameters()).device
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """Run inference — returns (N, K, Q) numpy array."""
+        self.model.eval()
+        n, s, f = X.shape
+        X_s = self.scaler.transform(X.reshape(-1, f)).reshape(n, s, f)
+        X_t = torch.FloatTensor(X_s).to(self.device)
+        with torch.no_grad():
+            out = self.model(X_t)
+        return out.cpu().numpy()
 
 
 class ModelRegistry:
@@ -129,6 +184,71 @@ class ModelRegistry:
 
         return model, scaler, metadata
 
+    def load_bundle(self, model_id: str) -> "ModelBundle":
+        """Load a complete model bundle ready for inference.
+
+        Unlike ``load_model``, this method automatically resolves the
+        correct model class and constructor kwargs from saved metadata,
+        so the caller does not need to know the architecture details.
+
+        Returns:
+            A ``ModelBundle`` with model in eval mode + fitted scaler.
+
+        Raises:
+            FileNotFoundError: If the model directory does not exist.
+            ValueError: If the architecture stored in metadata is unknown.
+        """
+        model_dir = self.base_dir / model_id
+        if not model_dir.exists():
+            raise FileNotFoundError(
+                f"Model '{model_id}' not found in registry"
+            )
+
+        metadata = json.loads((model_dir / "metadata.json").read_text())
+        cfg = metadata.get("config", {})
+        arch_name = metadata.get("architecture", cfg.get("architecture", "TCN"))
+        arch_map = _get_arch_map()
+        model_class = arch_map.get(arch_name)
+        if model_class is None:
+            raise ValueError(
+                f"Unknown architecture '{arch_name}' in model metadata"
+            )
+
+        feature_names = metadata.get("feature_names", [])
+        input_size = len(feature_names) or cfg.get("input_size", 30)
+        quantiles = tuple(cfg.get("quantiles", [0.1, 0.5, 0.9]))
+
+        model = model_class(
+            input_size=input_size,
+            hidden_size=cfg.get("hidden_size", 64),
+            num_layers=cfg.get("num_layers", 2),
+            forecast_steps=cfg.get("forecast_steps", 20),
+            quantiles=quantiles,
+        )
+        model.load_state_dict(
+            torch.load(
+                model_dir / "weights.pth",
+                map_location="cpu",
+                weights_only=True,
+            )
+        )
+        model.eval()
+
+        scaler = joblib.load(model_dir / "scaler.joblib")
+
+        return ModelBundle(
+            model=model,
+            scaler=scaler,
+            metadata=metadata,
+            model_id=model_id,
+            label=metadata.get("label", model_id),
+            asset=metadata.get("asset", "GLD"),
+            architecture=arch_name,
+            feature_names=feature_names,
+            quantiles_tuple=quantiles,
+            config=cfg,
+        )
+
     # ------------------------------------------------------------------
     # List
     # ------------------------------------------------------------------
@@ -171,6 +291,30 @@ class ModelRegistry:
                 f"Model '{model_id}' not found in registry"
             )
         shutil.rmtree(model_dir)
+
+    def update_model_label(self, model_id: str, new_label: str) -> None:
+        """Rename a model's display label.
+
+        Args:
+            model_id: The unique model identifier.
+            new_label: New label (max 60 chars, non-empty).
+
+        Raises:
+            FileNotFoundError: If the model does not exist.
+            ValueError: If *new_label* is invalid.
+        """
+        model_dir = self.base_dir / model_id
+        meta_file = model_dir / "metadata.json"
+        if not meta_file.exists():
+            raise FileNotFoundError(
+                f"Model '{model_id}' not found in registry"
+            )
+        new_label = _validate_label(new_label)
+        meta = json.loads(meta_file.read_text())
+        meta["label"] = new_label
+        meta_file.write_text(
+            json.dumps(meta, indent=2, default=str)
+        )
 
     def delete_all_models(
         self, asset: Optional[str] = None, confirmed: bool = False

@@ -64,6 +64,11 @@ class ModelTrainer:
             "train_loss": [],
             "val_loss": [],
         }
+        # Early stopping state
+        self.best_val_loss: float = float('inf')
+        self.best_epoch: int = 0
+        self.patience_counter: int = 0
+        self._best_model_state: Optional[Dict] = None
 
     # ------------------------------------------------------------------
     # Properties
@@ -145,11 +150,15 @@ class ModelTrainer:
         epochs: int = 50,
         learning_rate: float = 0.001,
         on_epoch: Optional[Callable] = None,
+        early_stopping: bool = False,
+        patience: int = 5,
     ) -> Dict[str, List[float]]:
         """Run training loop and return loss history.
 
         Args:
             on_epoch: optional callback ``(epoch_0based, total, history)``.
+            early_stopping: if True, stops training when val_loss stops improving.
+            patience: number of epochs with no improvement before stopping.
         """
         optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         q = self._q.to(self.device)
@@ -177,7 +186,23 @@ class ModelTrainer:
                     pred = self.model(bx)
                     loss = pinball_loss(pred, by, q)
                     running += loss.item()
-            self.history["val_loss"].append(running / len(val_loader))
+            val_loss = running / len(val_loader)
+            self.history["val_loss"].append(val_loss)
+
+            # Early stopping logic
+            if early_stopping:
+                if val_loss < self.best_val_loss:
+                    self.best_val_loss = val_loss
+                    self.best_epoch = epoch
+                    self.patience_counter = 0
+                    self._save_best_checkpoint()
+                else:
+                    self.patience_counter += 1
+                
+                if self.patience_counter >= patience:
+                    print(f"Early stopping at epoch {epoch+1}/{epochs} (best: {self.best_epoch+1})")
+                    self._load_best_checkpoint()
+                    break
 
             if on_epoch:
                 on_epoch(epoch, epochs, self.history)
@@ -203,6 +228,20 @@ class ModelTrainer:
         with torch.no_grad():
             out = self.model(X_t)
         return out.cpu().numpy()
+
+    # ------------------------------------------------------------------
+    # Early stopping helpers
+    # ------------------------------------------------------------------
+
+    def _save_best_checkpoint(self) -> None:
+        """Save current model state as best checkpoint (in memory)."""
+        import copy
+        self._best_model_state = copy.deepcopy(self.model.state_dict())
+
+    def _load_best_checkpoint(self) -> None:
+        """Restore model weights from best checkpoint."""
+        if self._best_model_state is not None:
+            self.model.load_state_dict(self._best_model_state)
 
     # ------------------------------------------------------------------
     # Persistence

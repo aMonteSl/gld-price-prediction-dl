@@ -44,6 +44,8 @@ class Recommendation:
     details: Dict[str, Any] = field(default_factory=dict)
     risk: RiskMetrics = field(default_factory=RiskMetrics)
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    score_components: Dict[str, float] = field(default_factory=dict)  # NEW: breakdown
+    score_rationale: Dict[str, str] = field(default_factory=dict)     # NEW: explanations
 
 
 class DecisionEngine:
@@ -105,6 +107,8 @@ class DecisionEngine:
         rationale: List[str] = []
         warnings: List[str] = []
         details: Dict[str, Any] = {}
+        score_components: Dict[str, float] = {"base": 50.0}  # NEW: track each contrib
+        score_rationale: Dict[str, str] = {}                 # NEW: explain each contrib
 
         q_idx = {round(q, 2): i for i, q in enumerate(quantiles)}
         median_idx = q_idx.get(0.5, len(quantiles) // 2)
@@ -118,21 +122,28 @@ class DecisionEngine:
         cum_return = float(np.sum(returns_quantiles[:h, median_idx]))
         details["cumulative_return_median"] = cum_return
 
+        expected_return_score = 0.0
         if cum_return >= self.min_expected_return:
+            expected_return_score = 20.0
             score += 20
             rationale.append(
                 f"Expected {h}-day return {cum_return:+.2%} exceeds "
                 f"threshold {self.min_expected_return:.2%}"
             )
+            score_rationale["expected_return"] = f"Median +{cum_return:.2%} over {h}d"
         elif cum_return <= -self.min_expected_return:
+            expected_return_score = -20.0
             score -= 20
             rationale.append(
                 f"Expected {h}-day return {cum_return:+.2%} is negative"
             )
+            score_rationale["expected_return"] = f"Median {cum_return:.2%} (negative)"
         else:
             rationale.append(
                 f"Expected {h}-day return {cum_return:+.2%} is near zero"
             )
+            score_rationale["expected_return"] = f"Median {cum_return:.2%} (neutral)"
+        score_components["expected_return"] = expected_return_score
 
         # --- 2. Uncertainty width ----------------------------------------
         spread = float(
@@ -141,38 +152,62 @@ class DecisionEngine:
             )
         )
         details["mean_uncertainty_spread"] = spread
+        uncertainty_score = 0.0
         if spread > 0.03:
+            uncertainty_score = -10.0
             score -= 10
             warnings.append(
                 f"High forecast uncertainty (avg daily spread {spread:.4f})"
             )
+            score_rationale["uncertainty"] = f"High spread {spread:.3f}"
         elif spread < 0.01:
+            uncertainty_score = 5.0
             score += 5
             rationale.append("Low forecast uncertainty — tight prediction band")
+            score_rationale["uncertainty"] = f"Low spread {spread:.3f}"
+        else:
+            score_rationale["uncertainty"] = f"Moderate spread {spread:.3f}"
+        score_components["uncertainty"] = uncertainty_score
 
         # --- 3. Trend filter (SMA) ----------------------------------------
         trend_score, trend_msgs = self._trend_filter(df)
         score += trend_score
         rationale.extend(trend_msgs)
+        score_components["trend"] = float(trend_score)
+        if trend_msgs:
+            score_rationale["trend"] = trend_msgs[0][:50]  # truncate for display
 
         # --- 4. Volatility filter (ATR %) ---------------------------------
         vol_score, vol_msgs, vol_warns = self._volatility_filter(df)
         score += vol_score
         rationale.extend(vol_msgs)
         warnings.extend(vol_warns)
+        score_components["volatility"] = float(vol_score)
+        if vol_msgs or vol_warns:
+            score_rationale["volatility"] = (vol_msgs + vol_warns)[0][:50]
 
         # --- 5. Market regime detection -----------------------------------
         regime = self._detect_regime(df)
         details["market_regime"] = regime
+        regime_score = 0.0
         if regime == "high_volatility":
+            regime_score = -5.0
             score -= 5
             warnings.append("Market regime: high volatility environment")
+            score_rationale["regime"] = "High volatility"
         elif regime == "trending_up":
+            regime_score = 5.0
             score += 5
             rationale.append("Market regime: trending up")
+            score_rationale["regime"] = "Trending up"
         elif regime == "trending_down":
+            regime_score = -5.0
             score -= 5
             rationale.append("Market regime: trending down")
+            score_rationale["regime"] = "Trending down"
+        else:
+            score_rationale["regime"] = regime.replace("_", " ").title()
+        score_components["regime"] = regime_score
 
         # --- 6. Conflicting signals check ---------------------------------
         conflict_penalty, conflict_msgs = self._check_conflicting_signals(
@@ -180,24 +215,37 @@ class DecisionEngine:
         )
         score += conflict_penalty
         warnings.extend(conflict_msgs)
+        score_components["conflicts"] = float(conflict_penalty)
+        if conflict_msgs:
+            score_rationale["conflicts"] = conflict_msgs[0][:50]
 
         # --- 7. Diagnostics gate ------------------------------------------
+        diag_score = 0.0
         if diagnostics_verdict:
             details["diagnostics_verdict"] = diagnostics_verdict
             if diagnostics_verdict.lower() == "healthy":
+                diag_score = 5.0
                 score += 5
                 rationale.append("Model diagnostics: healthy")
+                score_rationale["diagnostics"] = "Healthy"
             elif diagnostics_verdict.lower() in ("overfitting", "overfit"):
+                diag_score = -10.0
                 score -= 10
                 warnings.append(
                     "Model diagnostics: overfitting — predictions may be unreliable"
                 )
+                score_rationale["diagnostics"] = "Overfitting"
             elif diagnostics_verdict.lower() in ("underfitting", "underfit"):
+                diag_score = -5.0
                 score -= 5
                 warnings.append("Model diagnostics: underfitting")
+                score_rationale["diagnostics"] = "Underfitting"
             elif diagnostics_verdict.lower() == "noisy":
+                diag_score = -5.0
                 score -= 5
                 warnings.append("Model diagnostics: noisy training")
+                score_rationale["diagnostics"] = "Noisy"
+        score_components["diagnostics"] = diag_score
 
         # --- Clamp & decide -----------------------------------------------
         score = float(np.clip(score, 0, 100))
@@ -222,6 +270,8 @@ class DecisionEngine:
             warnings=warnings,
             details=details,
             risk=risk,
+            score_components=score_components,
+            score_rationale=score_rationale,
         )
 
     # ------------------------------------------------------------------

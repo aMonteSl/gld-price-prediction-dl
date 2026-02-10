@@ -76,3 +76,54 @@ class TestQuantileMetrics:
         metrics = ModelEvaluator.evaluate_quantiles(y_true, y_pred, list(QUANTILES))
         for q in [10, 50, 90]:
             assert 0 <= metrics[f"q{q}_cal_error"] <= 1.0
+
+class TestQuantileCalibration:
+    """Test that pinball loss produces calibrated quantile forecasts."""
+
+    def test_pinball_produces_calibrated_quantiles(self):
+        """Train a small model and verify quantile coverage is within tolerance."""
+        from gldpred.models import TCNForecaster
+        from gldpred.training import ModelTrainer
+        
+        # Generate synthetic data with known distribution
+        np.random.seed(42)
+        N = 500
+        seq_len = 10
+        input_size = 5
+        forecast_steps = 5
+        quantiles = (0.1, 0.5, 0.9)
+        
+        # Simple AR-like synthetic sequences
+        X = np.random.randn(N, seq_len, input_size).astype(np.float32) * 0.01
+        y = np.random.randn(N, forecast_steps).astype(np.float32) * 0.01
+        
+        # Train a tiny model
+        model = TCNForecaster(
+            input_size=input_size,
+            hidden_size=16,
+            num_layers=1,
+            forecast_steps=forecast_steps,
+            quantiles=quantiles,
+        )
+        trainer = ModelTrainer(model, quantiles=quantiles)
+        train_loader, val_loader = trainer.prepare_data(X, y, test_size=0.2, batch_size=32)
+        trainer.train(train_loader, val_loader, epochs=20, learning_rate=0.01)
+        
+        # Predict on validation set
+        X_val = X[int(N * 0.8):]
+        y_val = y[int(N * 0.8):]
+        preds = trainer.predict(X_val)  # (N_val, K, 3)
+        
+        # Evaluate quantile calibration
+        metrics = ModelEvaluator.evaluate_quantiles(y_val, preds, list(quantiles))
+        
+        # P10 should have ~10% of actuals below it (with tolerance)
+        # P90 should have ~90% of actuals below it (with tolerance)
+        # Tolerance is generous because small synthetic dataset
+        assert 0.05 < metrics["q10_coverage"] < 0.20, f"P10 coverage {metrics['q10_coverage']} out of range"
+        assert 0.40 < metrics["q50_coverage"] < 0.60, f"P50 coverage {metrics['q50_coverage']} out of range"
+        assert 0.80 < metrics["q90_coverage"] < 0.95, f"P90 coverage {metrics['q90_coverage']} out of range"
+        
+        # Calibration error should be reasonable
+        assert metrics["q10_cal_error"] < 0.15
+        assert metrics["q90_cal_error"] < 0.15

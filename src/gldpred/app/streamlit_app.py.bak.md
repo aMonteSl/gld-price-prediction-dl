@@ -9,7 +9,8 @@ Run with::
 """
 from __future__ import annotations
 
-from typing import Dict, Type
+import traceback
+from typing import Any, Dict, List, Type
 
 import streamlit as st
 import torch.nn as nn
@@ -23,7 +24,6 @@ from gldpred.app.ui.tabs_forecast import render as render_forecast_tab
 from gldpred.app.ui.tabs_recommendation import render as render_recommendation_tab
 from gldpred.app.ui.tabs_evaluation import render as render_evaluation_tab
 from gldpred.app.ui.tabs_compare import render as render_compare_tab
-from gldpred.app.ui.tabs_tutorial import render as render_tutorial_tab
 from gldpred.config import AppConfig
 from gldpred.i18n import STRINGS
 from gldpred.models import GRUForecaster, LSTMForecaster, TCNForecaster
@@ -90,7 +90,32 @@ def main() -> None:
     with tab_compare:
         render_compare_tab(_t())
     with tab_tutorial:
-        render_tutorial_tab(_t())
+        _tab_tutorial()
+
+
+# ======================================================================
+# TAB 8 -- TUTORIAL
+# ======================================================================
+def _tab_tutorial() -> None:
+    t = _t()
+    st.header(t["tut_header"])
+    st.markdown(t["tut_disclaimer"])
+
+    sections = [
+        ("tut_s1_title", "tut_s1_body"),
+        ("tut_s2_title", "tut_s2_body"),
+        ("tut_s3_title", "tut_s3_body"),
+        ("tut_s4_title", "tut_s4_body"),
+        ("tut_s5_title", "tut_s5_body"),
+        ("tut_s6_title", "tut_s6_body"),
+        ("tut_s7_title", "tut_s7_body"),
+        ("tut_s8_title", "tut_s8_body"),
+        ("tut_s9_title", "tut_s9_body"),
+        ("tut_s10_title", "tut_s10_body"),
+    ]
+    for title_key, body_key in sections:
+        with st.expander(t.get(title_key, title_key)):
+            st.markdown(t.get(body_key, ""))
 
 
 # -- Run --

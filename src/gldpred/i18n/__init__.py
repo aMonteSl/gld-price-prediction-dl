@@ -39,6 +39,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "sidebar_epochs": "Epochs",
         "sidebar_batch_size": "Batch Size",
         "sidebar_learning_rate": "Learning Rate",
+        "sidebar_active_model": "Active Model",
+        "sidebar_select_model": "Select model",
+        "sidebar_no_models": "No saved models for this asset",
+        "sidebar_model_loaded": "✅ Model loaded: {label}",
+        "sidebar_model_mismatch": "⚠️ Model asset ({model_asset}) ≠ selected asset ({asset})",
         "sidebar_about": "About",
         "sidebar_about_text": (
             "Multi-step quantile forecasting for GLD, SLV, BTC-USD & PALL "
@@ -50,6 +55,7 @@ STRINGS: dict[str, dict[str, str]] = {
         # -- Tabs ---------------------------------------------------------
         "tab_data": "📊 Data",
         "tab_train": "🔧 Train",
+        "tab_models": "🗂️ Models",
         "tab_forecast": "📈 Forecast",
         "tab_recommendation": "🎯 Recommendation",
         "tab_evaluation": "📉 Evaluation",
@@ -58,7 +64,8 @@ STRINGS: dict[str, dict[str, str]] = {
 
         # -- Tab 1: Data --------------------------------------------------
         "data_header": "Data Loading & Exploration",
-        "data_load_btn": "Load Data",
+        "data_refresh_btn": "🔄 Refresh Data",
+        "data_auto_loaded": "Data loaded automatically for {asset}.",
         "data_loading_spinner": "Downloading data…",
         "data_load_success": "Loaded {n} records for {asset} ({start} → {end})",
         "data_load_error": "Error loading data: {err}",
@@ -137,7 +144,7 @@ STRINGS: dict[str, dict[str, str]] = {
 
         # -- Tab 3: Forecast ----------------------------------------------
         "forecast_header": "Forecast Trajectory",
-        "forecast_warn_no_model": "⚠️ Train a model first.",
+        "forecast_warn_no_model": "⚠️ No model loaded. Train a new model or select a saved model from the sidebar.",
         "forecast_fan_chart": "Price Forecast with Uncertainty Bands",
         "forecast_table": "Forecast Table (next K days)",
         "forecast_col_day": "Day",
@@ -156,7 +163,7 @@ STRINGS: dict[str, dict[str, str]] = {
 
         # -- Tab 4: Recommendation ----------------------------------------
         "reco_header": "Decision Support",
-        "reco_warn_no_model": "⚠️ Train a model first.",
+        "reco_warn_no_model": "⚠️ No model loaded. Generate a forecast first (Forecast tab), or select a model from the sidebar.",
         "reco_disclaimer": (
             "> **Disclaimer:** This recommendation is purely educational. "
             "It does NOT constitute financial advice. Past performance does "
@@ -181,7 +188,7 @@ STRINGS: dict[str, dict[str, str]] = {
 
         # -- Tab 5: Evaluation --------------------------------------------
         "eval_header": "Model Evaluation",
-        "eval_warn_no_model": "⚠️ Train a model first.",
+        "eval_warn_no_model": "⚠️ No model loaded. Train a model or select a saved model from the sidebar.",
         "eval_trajectory_metrics": "Trajectory Metrics (validation set)",
         "eval_quantile_metrics": "Quantile Calibration",
         "eval_detailed": "All Metrics",
@@ -271,6 +278,102 @@ STRINGS: dict[str, dict[str, str]] = {
         "reco_history_header": "Recommendation History",
         "reco_history_empty": "No recommendations recorded yet.",
         "reco_history_clear": "Clear History",
+
+        # -- Action plan --------------------------------------------------
+        "ap_header": "Action Plan",
+        "ap_info": (
+            "Generate a time-based action plan for your chosen horizon. "
+            "Each day is classified as BUY / HOLD / SELL / AVOID using "
+            "the quantile forecast, with entry-window detection, optimal "
+            "exit selection, scenario analysis, and decision rationale."
+        ),
+        "ap_generate": "Generate Action Plan",
+        "ap_signal_buy": "🟢 BUY",
+        "ap_signal_hold": "🟡 HOLD",
+        "ap_signal_sell": "🔴 SELL",
+        "ap_signal_avoid": "⚫ AVOID",
+        "ap_overall_signal": "Overall Signal",
+        "ap_confidence": "Confidence",
+        "ap_narrative": "Summary",
+        "ap_rationale_header": "Decision Rationale",
+        "ap_trend": "Trend Confirmation",
+        "ap_volatility": "Volatility Regime",
+        "ap_quantile_risk": "Risk Assessment",
+        "ap_today": "Today's Assessment",
+        "ap_scenarios_header": "Scenario Analysis",
+        "ap_scenario_optimistic": "Optimistic (P90)",
+        "ap_scenario_base": "Base (P50)",
+        "ap_scenario_pessimistic": "Pessimistic (P10)",
+        "ap_return": "Return",
+        "ap_final_price": "Final Price",
+        "ap_pnl": "P&L",
+        "ap_investment_label": "on {amount}",
+        "ap_entry_exit_header": "Entry & Exit Optimization",
+        "ap_entry_window": "Best Entry Window",
+        "ap_best_exit": "Best Exit Day",
+        "ap_no_entry": "No favorable entry window found",
+        "ap_timeline_header": "Daily Action Timeline",
+        "ap_day_details": "Day {day} — {action}",
+        "ap_chart_title": "Price Trajectory & Action Plan",
+        "ap_plan_saved": "Plan saved to data/trade_plans/",
+        "ap_no_forecast": "Generate a forecast first in the Forecast tab.",
+        "ap_col_day": "Day",
+        "ap_col_date": "Date",
+        "ap_col_action": "Action",
+        "ap_col_price": "Price (P50)",
+        "ap_col_ret": "Return %",
+        "ap_col_risk": "Risk Score",
+        "ap_col_reason": "Rationale",
+        # Action plan sidebar
+        "sidebar_action_plan": "Action Plan Settings",
+        "sidebar_tp_horizon": "Plan Horizon (days)",
+        "sidebar_tp_take_profit": "Take-Profit (%)",
+        "sidebar_tp_stop_loss": "Stop-Loss (%)",
+        "sidebar_tp_min_return": "Min Expected Return (%)",
+        "sidebar_tp_risk_aversion": "Risk Aversion (λ)",
+        "sidebar_tp_investment": "Investment Amount ($)",
+
+        # -- Models tab (new) ----------------------------------------------
+        "models_header": "Model Management",
+        "models_info": (
+            "View, rename, delete, and assign primary models for each asset. "
+            "The primary model is used by the Forecast, Recommendation, and "
+            "Compare tabs."
+        ),
+        "models_asset_filter": "Filter by Asset",
+        "models_all_assets": "All Assets",
+        "models_no_models": "No models found. Train a model first in the Train tab.",
+        "models_rename_label": "New label",
+        "models_rename_btn": "Rename",
+        "models_rename_success": "Model renamed to: {label}",
+        "models_rename_error": "Rename error: {err}",
+        "models_delete_btn": "🗑️ Delete",
+        "models_delete_confirm": "Type DELETE to confirm:",
+        "models_delete_success": "Model deleted.",
+        "models_delete_error": "Delete error: {err}",
+        "models_set_primary_btn": "⭐ Set as Primary",
+        "models_unset_primary_btn": "Remove Primary",
+        "models_primary_badge": "⭐ PRIMARY",
+        "models_primary_set": "Primary model for {asset} set to: {label}",
+        "models_primary_removed": "Primary model for {asset} removed.",
+        "models_bulk_delete_header": "Bulk Delete",
+        "models_bulk_delete_btn": "Delete All Shown Models",
+        "models_bulk_confirm": "Type DELETE ALL to confirm deletion of {count} models:",
+        "models_col_label": "Label",
+        "models_col_asset": "Asset",
+        "models_col_arch": "Architecture",
+        "models_col_created": "Created",
+        "models_col_primary": "Primary",
+        "models_col_actions": "Actions",
+
+        # -- Compare tab (updated) ----------------------------------------
+        "compare_add_row": "+ Add Asset",
+        "compare_remove_row": "✕",
+        "compare_select_asset": "Asset",
+        "compare_select_model": "Model",
+        "compare_no_models_for_asset": "No models for {asset}. Train one first.",
+        "compare_base_label": "Base",
+        "compare_vs_label": "vs.",
 
         # -- Tutorial ------------------------------------------------------
         "tut_header": "📚 Tutorial — How This Application Works",
@@ -497,6 +600,7 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "sidebar_config": "Configuración",
         "sidebar_asset": "Activo / Ticker",
         "sidebar_data_settings": "Datos",
+        "sidebar_date_range": "Rango de fechas: todo el historial disponible → hoy (auto)",
         "sidebar_start_date": "Fecha de inicio",
         "sidebar_end_date_auto": "Fecha de fin: hoy (auto)",
         "sidebar_model_settings": "Modelo",
@@ -509,6 +613,11 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "sidebar_epochs": "Épocas",
         "sidebar_batch_size": "Tamaño de lote",
         "sidebar_learning_rate": "Tasa de aprendizaje",
+        "sidebar_active_model": "Modelo Activo",
+        "sidebar_select_model": "Seleccionar modelo",
+        "sidebar_no_models": "Sin modelos guardados para este activo",
+        "sidebar_model_loaded": "✅ Modelo cargado: {label}",
+        "sidebar_model_mismatch": "⚠️ Activo del modelo ({model_asset}) ≠ activo seleccionado ({asset})",
         "sidebar_about": "Acerca de",
         "sidebar_about_text": (
             "Pronóstico cuantílico multi-paso para GLD, SLV, BTC-USD y PALL "
@@ -520,6 +629,7 @@ The registry is stored in `data/model_registry/` (git-ignored).
         # -- Tabs ---------------------------------------------------------
         "tab_data": "📊 Datos",
         "tab_train": "🔧 Entrenar",
+        "tab_models": "🗂️ Modelos",
         "tab_forecast": "📈 Pronóstico",
         "tab_recommendation": "🎯 Recomendación",
         "tab_evaluation": "📉 Evaluación",
@@ -528,7 +638,8 @@ The registry is stored in `data/model_registry/` (git-ignored).
 
         # -- Tab 1: Data --------------------------------------------------
         "data_header": "Carga y exploración de datos",
-        "data_load_btn": "Cargar datos",
+        "data_refresh_btn": "🔄 Actualizar Datos",
+        "data_auto_loaded": "Datos cargados automáticamente para {asset}.",
         "data_loading_spinner": "Descargando datos…",
         "data_load_success": "Cargados {n} registros de {asset} ({start} → {end})",
         "data_load_error": "Error al cargar datos: {err}",
@@ -605,7 +716,7 @@ The registry is stored in `data/model_registry/` (git-ignored).
 
         # -- Tab 3: Forecast ----------------------------------------------
         "forecast_header": "Trayectoria de pronóstico",
-        "forecast_warn_no_model": "⚠️ Primero entrene un modelo.",
+        "forecast_warn_no_model": "⚠️ Sin modelo cargado. Entrene un modelo o seleccione uno guardado desde la barra lateral.",
         "forecast_fan_chart": "Pronóstico de precio con bandas de incertidumbre",
         "forecast_table": "Tabla de pronóstico (próximos K días)",
         "forecast_col_day": "Día",
@@ -624,7 +735,7 @@ The registry is stored in `data/model_registry/` (git-ignored).
 
         # -- Tab 4: Recommendation ----------------------------------------
         "reco_header": "Soporte de decisión",
-        "reco_warn_no_model": "⚠️ Primero entrene un modelo.",
+        "reco_warn_no_model": "⚠️ Sin modelo cargado. Genere un pronóstico primero (pestaña Pronóstico), o seleccione un modelo desde la barra lateral.",
         "reco_disclaimer": (
             "> **Aviso:** Esta recomendación es puramente educativa. "
             "NO constituye asesoramiento financiero. El rendimiento pasado "
@@ -649,7 +760,7 @@ The registry is stored in `data/model_registry/` (git-ignored).
 
         # -- Tab 5: Evaluation --------------------------------------------
         "eval_header": "Evaluación del modelo",
-        "eval_warn_no_model": "⚠️ Primero entrene un modelo.",
+        "eval_warn_no_model": "⚠️ Sin modelo cargado. Entrene un modelo o seleccione uno guardado desde la barra lateral.",
         "eval_trajectory_metrics": "Métricas de trayectoria (validación)",
         "eval_quantile_metrics": "Calibración cuantílica",
         "eval_detailed": "Todas las métricas",
@@ -739,6 +850,103 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "reco_history_header": "Historial de Recomendaciones",
         "reco_history_empty": "Sin recomendaciones registradas aún.",
         "reco_history_clear": "Limpiar Historial",
+
+        # -- Action plan --------------------------------------------------
+        "ap_header": "Plan de Acción",
+        "ap_info": (
+            "Genera un plan de acción temporal para tu horizonte elegido. "
+            "Cada día se clasifica como COMPRAR / MANTENER / VENDER / EVITAR "
+            "usando el pronóstico cuantílico, con detección de ventana de "
+            "entrada, selección óptima de salida, análisis de escenarios "
+            "y razonamiento de la decisión."
+        ),
+        "ap_generate": "Generar Plan de Acción",
+        "ap_signal_buy": "🟢 COMPRAR",
+        "ap_signal_hold": "🟡 MANTENER",
+        "ap_signal_sell": "🔴 VENDER",
+        "ap_signal_avoid": "⚫ EVITAR",
+        "ap_overall_signal": "Señal General",
+        "ap_confidence": "Confianza",
+        "ap_narrative": "Resumen",
+        "ap_rationale_header": "Razonamiento de la Decisión",
+        "ap_trend": "Confirmación de Tendencia",
+        "ap_volatility": "Régimen de Volatilidad",
+        "ap_quantile_risk": "Evaluación de Riesgo",
+        "ap_today": "Evaluación de Hoy",
+        "ap_scenarios_header": "Análisis de Escenarios",
+        "ap_scenario_optimistic": "Optimista (P90)",
+        "ap_scenario_base": "Base (P50)",
+        "ap_scenario_pessimistic": "Pesimista (P10)",
+        "ap_return": "Retorno",
+        "ap_final_price": "Precio Final",
+        "ap_pnl": "G&P",
+        "ap_investment_label": "sobre {amount}",
+        "ap_entry_exit_header": "Optimización de Entrada y Salida",
+        "ap_entry_window": "Mejor Ventana de Entrada",
+        "ap_best_exit": "Mejor Día de Salida",
+        "ap_no_entry": "No se encontró ventana de entrada favorable",
+        "ap_timeline_header": "Línea de Tiempo de Acciones Diarias",
+        "ap_day_details": "Día {day} — {action}",
+        "ap_chart_title": "Trayectoria de Precio y Plan de Acción",
+        "ap_plan_saved": "Plan guardado en data/trade_plans/",
+        "ap_no_forecast": "Genera un pronóstico primero en la pestaña Pronóstico.",
+        "ap_col_day": "Día",
+        "ap_col_date": "Fecha",
+        "ap_col_action": "Acción",
+        "ap_col_price": "Precio (P50)",
+        "ap_col_ret": "Retorno %",
+        "ap_col_risk": "Puntuación Riesgo",
+        "ap_col_reason": "Razonamiento",
+        # Action plan sidebar
+        "sidebar_action_plan": "Config. Plan de Acción",
+        "sidebar_tp_horizon": "Horizonte del Plan (días)",
+        "sidebar_tp_take_profit": "Take-Profit (%)",
+        "sidebar_tp_stop_loss": "Stop-Loss (%)",
+        "sidebar_tp_min_return": "Retorno Mín. Esperado (%)",
+        "sidebar_tp_risk_aversion": "Aversión al Riesgo (λ)",
+        "sidebar_tp_investment": "Monto de Inversión ($)",
+
+        # -- Models tab (new) ----------------------------------------------
+        "models_header": "Gestión de Modelos",
+        "models_info": (
+            "Vea, renombre, elimine y asigne modelos primarios para cada activo. "
+            "El modelo primario es usado por las pestañas Pronóstico, Recomendación "
+            "y Comparar."
+        ),
+        "models_asset_filter": "Filtrar por Activo",
+        "models_all_assets": "Todos los Activos",
+        "models_no_models": "No se encontraron modelos. Entrene un modelo primero en la pestaña Entrenar.",
+        "models_rename_label": "Nueva etiqueta",
+        "models_rename_btn": "Renombrar",
+        "models_rename_success": "Modelo renombrado a: {label}",
+        "models_rename_error": "Error al renombrar: {err}",
+        "models_delete_btn": "🗑️ Eliminar",
+        "models_delete_confirm": "Escriba DELETE para confirmar:",
+        "models_delete_success": "Modelo eliminado.",
+        "models_delete_error": "Error al eliminar: {err}",
+        "models_set_primary_btn": "⭐ Establecer como Primario",
+        "models_unset_primary_btn": "Quitar Primario",
+        "models_primary_badge": "⭐ PRIMARIO",
+        "models_primary_set": "Modelo primario de {asset} establecido: {label}",
+        "models_primary_removed": "Modelo primario de {asset} eliminado.",
+        "models_bulk_delete_header": "Eliminación Masiva",
+        "models_bulk_delete_btn": "Eliminar Todos los Modelos Mostrados",
+        "models_bulk_confirm": "Escriba DELETE ALL para confirmar la eliminación de {count} modelos:",
+        "models_col_label": "Etiqueta",
+        "models_col_asset": "Activo",
+        "models_col_arch": "Arquitectura",
+        "models_col_created": "Creado",
+        "models_col_primary": "Primario",
+        "models_col_actions": "Acciones",
+
+        # -- Compare tab (updated) ----------------------------------------
+        "compare_add_row": "+ Agregar Activo",
+        "compare_remove_row": "✕",
+        "compare_select_asset": "Activo",
+        "compare_select_model": "Modelo",
+        "compare_no_models_for_asset": "Sin modelos para {asset}. Entrene uno primero.",
+        "compare_base_label": "Base",
+        "compare_vs_label": "vs.",
 
         # -- Tutorial ------------------------------------------------------
         "tut_header": "📚 Tutorial — Cómo funciona esta aplicación",
