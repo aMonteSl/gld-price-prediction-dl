@@ -1,9 +1,10 @@
 """Rule-based decision engine for trade recommendations.
 
 Combines forecast trajectories, trend filters, volatility analysis,
-market regime detection, and model health gating to produce a
-**BUY / HOLD / AVOID** recommendation with confidence, risk metrics,
-stop-loss / take-profit levels, and rationale.
+market regime detection, model health gating, and **asset-class-aware
+risk adjustments** to produce a **BUY / HOLD / AVOID** recommendation
+with confidence, risk metrics, stop-loss / take-profit levels, and
+rationale.
 
 .. warning::
     This is a **decision-support tool**, not financial advice.
@@ -12,10 +13,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    from gldpred.config.assets import AssetInfo
 
 
 # ======================================================================
@@ -88,6 +92,7 @@ class DecisionEngine:
         df: pd.DataFrame,
         quantiles: tuple[float, ...] = (0.1, 0.5, 0.9),
         diagnostics_verdict: Optional[str] = None,
+        asset_info: Optional["AssetInfo"] = None,
     ) -> Recommendation:
         """Generate a recommendation.
 
@@ -102,6 +107,8 @@ class DecisionEngine:
             Which quantile columns correspond to the Q dimension.
         diagnostics_verdict : str or None
             Training diagnostics verdict (e.g. ``"healthy"``).
+        asset_info : AssetInfo or None
+            Asset metadata for risk-aware scoring adjustments.
         """
         score = 50.0
         rationale: List[str] = []
@@ -246,6 +253,22 @@ class DecisionEngine:
                 warnings.append("Model diagnostics: noisy training")
                 score_rationale["diagnostics"] = "Noisy"
         score_components["diagnostics"] = diag_score
+
+        # --- 8. Asset-class risk modifier ---------------------------------
+        asset_class_score = 0.0
+        if asset_info is not None:
+            asset_class_score, ac_msgs, ac_warns = self._asset_class_modifier(
+                asset_info, cum_return, spread,
+            )
+            score += asset_class_score
+            rationale.extend(ac_msgs)
+            warnings.extend(ac_warns)
+            details["risk_level"] = asset_info.risk_level
+            details["asset_role"] = asset_info.role
+            details["volatility_profile"] = asset_info.volatility_profile
+            if ac_msgs or ac_warns:
+                score_rationale["asset_class"] = (ac_msgs + ac_warns)[0][:60]
+        score_components["asset_class"] = asset_class_score
 
         # --- Clamp & decide -----------------------------------------------
         score = float(np.clip(score, 0, 100))
@@ -459,6 +482,72 @@ class DecisionEngine:
         else:
             score -= 10
             warns.append(f"High volatility ({details_str})")
+
+        return score, msgs, warns
+
+    # ------------------------------------------------------------------
+    # Asset-class risk modifier
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _asset_class_modifier(
+        asset_info: "AssetInfo",
+        cum_return: float,
+        spread: float,
+    ) -> tuple[float, List[str], List[str]]:
+        """Adjust score based on asset risk classification.
+
+        High-risk assets receive a penalty unless their return justifies it.
+        Low-risk assets get a small stability bonus.  The benchmark role
+        is treated neutrally.
+
+        Returns ``(score_delta, rationale_msgs, warning_msgs)``.
+        """
+        score = 0.0
+        msgs: List[str] = []
+        warns: List[str] = []
+
+        risk = asset_info.risk_level
+        role = asset_info.role
+        vol_profile = asset_info.volatility_profile
+
+        # Risk-tier adjustments
+        if risk == "high":
+            # High-risk assets need a stronger signal to justify BUY
+            if cum_return < 0.005:
+                score -= 5
+                warns.append(
+                    f"High-risk asset ({asset_info.ticker}) — modest return "
+                    f"does not compensate risk"
+                )
+            elif spread > 0.02:
+                score -= 3
+                warns.append(
+                    f"High-risk asset with wide uncertainty — caution advised"
+                )
+            else:
+                msgs.append(
+                    f"High-risk asset with strong return signal — "
+                    f"risk may be justified"
+                )
+        elif risk == "low":
+            # Low-risk / stable assets get a small confidence bonus
+            score += 3
+            msgs.append(f"Low-risk asset — stability factor applied")
+
+        # Volatile profile extra scrutiny
+        if vol_profile == "volatile" and spread > 0.015:
+            score -= 2
+            warns.append(
+                f"Volatile asset class with elevated forecast uncertainty"
+            )
+
+        # Speculative role: require conviction
+        if role == "speculative" and cum_return < 0.01:
+            score -= 3
+            warns.append(
+                f"Speculative asset — requires higher conviction "
+                f"(return {cum_return:+.2%})"
+            )
 
         return score, msgs, warns
 

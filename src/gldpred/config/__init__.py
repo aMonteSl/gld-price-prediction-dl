@@ -4,9 +4,31 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from gldpred.config.assets import ASSET_CATALOG, AssetInfo, get_asset_info, supported_tickers
+from gldpred.config.assets import (
+    ASSET_CATALOG,
+    ASSET_CATEGORIES,
+    ASSET_ROLES,
+    AssetInfo,
+    BENCHMARK_ASSET,
+    INVESTMENT_HORIZONS,
+    RISK_LEVELS,
+    VOLATILITY_PROFILES,
+    assets_by_category,
+    assets_by_risk,
+    assets_by_role,
+    get_asset_info,
+    get_benchmark,
+    supported_tickers,
+)
 
-SUPPORTED_ASSETS = ("GLD", "SLV", "BTC-USD", "PALL")
+SUPPORTED_ASSETS: Tuple[str, ...] = (
+    # Low risk
+    "SPY", "VT", "TLT", "IEF", "SHV",
+    # Medium risk
+    "QQQ", "GLD", "SLV", "VNQ", "TIP", "PALL",
+    # High risk
+    "BTC-USD", "ETH-USD", "USO", "COPX", "ARKK", "EEM",
+)
 
 
 @dataclass
@@ -51,7 +73,10 @@ class DecisionConfig:
     trend_sma_short: int = 50
     trend_sma_long: int = 200
     max_volatility: dict = field(
-        default_factory=lambda: {"default": 0.02, "BTC-USD": 0.05}
+        default_factory=lambda: {
+            ticker: info.max_volatility
+            for ticker, info in ASSET_CATALOG.items()
+        }
     )
     model_health_gate: bool = True
 

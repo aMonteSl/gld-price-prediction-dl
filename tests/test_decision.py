@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from gldpred.config.assets import AssetInfo, get_asset_info
 from gldpred.decision import DecisionEngine, Recommendation
 from conftest import FORECAST_STEPS, QUANTILES
 
@@ -104,3 +105,66 @@ class TestDecisionEngine:
         df = _make_df(close=200, sma50=190, sma200=150, atr_pct=0.005)
         reco = engine.recommend(returns, df, quantiles=QUANTILES, diagnostics_verdict="healthy")
         assert 0 <= reco.confidence <= 100
+
+
+class TestAssetClassModifier:
+    """Tests for risk-aware asset-class scoring."""
+
+    def test_high_risk_penalty_on_weak_return(self):
+        """High-risk asset with modest return gets penalised."""
+        engine = DecisionEngine(horizon_days=FORECAST_STEPS)
+        returns = np.full((FORECAST_STEPS, len(QUANTILES)), 0.001)  # weak
+        df = _make_df(close=160, sma50=155, sma200=140, atr_pct=0.01)
+        btc_info = get_asset_info("BTC-USD")
+
+        reco_no_info = engine.recommend(returns, df, quantiles=QUANTILES)
+        reco_with_info = engine.recommend(
+            returns, df, quantiles=QUANTILES, asset_info=btc_info,
+        )
+        # High-risk penalty should lower confidence
+        assert reco_with_info.confidence <= reco_no_info.confidence
+
+    def test_low_risk_bonus(self):
+        """Low-risk asset gets a stability bonus."""
+        engine = DecisionEngine(horizon_days=FORECAST_STEPS)
+        returns = np.full((FORECAST_STEPS, len(QUANTILES)), 0.003)
+        df = _make_df(close=160, sma50=155, sma200=140, atr_pct=0.01)
+        spy_info = get_asset_info("SPY")
+
+        reco_no_info = engine.recommend(returns, df, quantiles=QUANTILES)
+        reco_with_info = engine.recommend(
+            returns, df, quantiles=QUANTILES, asset_info=spy_info,
+        )
+        # Low-risk bonus should raise confidence
+        assert reco_with_info.confidence >= reco_no_info.confidence
+
+    def test_asset_class_component_in_score(self):
+        """The asset_class score component is always present."""
+        engine = DecisionEngine(horizon_days=FORECAST_STEPS)
+        returns = np.full((FORECAST_STEPS, len(QUANTILES)), 0.003)
+        df = _make_df()
+        reco = engine.recommend(
+            returns, df, quantiles=QUANTILES,
+            asset_info=get_asset_info("GLD"),
+        )
+        assert "asset_class" in reco.score_components
+        assert "risk_level" in reco.details
+
+    def test_no_asset_info_is_neutral(self):
+        """Without asset_info, the asset_class component is 0."""
+        engine = DecisionEngine(horizon_days=FORECAST_STEPS)
+        returns = np.full((FORECAST_STEPS, len(QUANTILES)), 0.003)
+        df = _make_df()
+        reco = engine.recommend(returns, df, quantiles=QUANTILES)
+        assert reco.score_components.get("asset_class", 0) == 0
+
+    def test_speculative_needs_high_conviction(self):
+        """Speculative assets with low returns get extra penalty."""
+        engine = DecisionEngine(horizon_days=FORECAST_STEPS)
+        returns = np.full((FORECAST_STEPS, len(QUANTILES)), 0.001)
+        df = _make_df(close=160, sma50=155, sma200=140, atr_pct=0.01)
+        arkk = get_asset_info("ARKK")
+        reco = engine.recommend(
+            returns, df, quantiles=QUANTILES, asset_info=arkk,
+        )
+        assert reco.score_components["asset_class"] < 0

@@ -12,8 +12,9 @@
 downloads historical price data for multiple financial assets, engineers
 technical features, and trains **GRU / LSTM / TCN** models (PyTorch) to
 produce **probabilistic quantile trajectory forecasts**. Supported assets
-are defined in the `SUPPORTED_ASSETS` constant: **GLD** (Gold ETF),
-**SLV** (Silver ETF), **BTC-USD** (Bitcoin), and **PALL** (Palladium ETF).
+(17 tickers across 3 risk tiers) are defined in the `SUPPORTED_ASSETS`
+constant and the `ASSET_CATALOG` metadata registry.  **SPY** (S&P 500
+ETF) serves as the mandatory benchmark baseline.
 
 The system uses a **unified quantile forecasting** approach — there is no
 separate regression, classification, or multi-task split. Every model
@@ -23,11 +24,14 @@ forecast steps (default 20) and `Q` is the number of quantiles (default
 
 A **decision engine** converts forecast trajectories into actionable
 **BUY / HOLD / AVOID** recommendations with confidence scores, **risk
-metrics** (stop-loss, take-profit, risk-reward ratio, max drawdown), and
-**market regime detection**.
+metrics** (stop-loss, take-profit, risk-reward ratio, max drawdown),
+**market regime detection**, and **asset-class-aware risk modifiers**
+that adjust scoring based on each asset's risk level, volatility
+profile, and role.
 
 A **portfolio comparison engine** ranks multiple assets side-by-side for a
-given investment amount, producing a leaderboard of expected outcomes.
+given investment amount, producing a leaderboard of expected outcomes
+with the **S&P 500 (SPY) as benchmark** reference.
 
 A **Streamlit** GUI provides interactive data exploration (auto-loaded),
 training, **model management** (rename, delete, assign primary),
@@ -190,7 +194,7 @@ gld-price-prediction-dl/
 
 | Module | Key Export | Purpose |
 |--------|-----------|---------|
-| `gldpred.config` | `DataConfig`, `ModelConfig`, `TrainingConfig`, `DecisionConfig`, `AppConfig`, `SUPPORTED_ASSETS`, `ASSET_CATALOG`, `AssetInfo` | Typed configuration via `@dataclass` + asset metadata catalog |
+| `gldpred.config` | `DataConfig`, `ModelConfig`, `TrainingConfig`, `DecisionConfig`, `AppConfig`, `SUPPORTED_ASSETS`, `ASSET_CATALOG`, `AssetInfo`, `BENCHMARK_ASSET`, `RISK_LEVELS`, `INVESTMENT_HORIZONS`, `VOLATILITY_PROFILES`, `ASSET_ROLES`, `ASSET_CATEGORIES`, `assets_by_risk`, `assets_by_category`, `assets_by_role`, `get_benchmark` | Typed configuration via `@dataclass` + asset metadata catalog with 3-tier risk classification |
 | `gldpred.data` | `AssetDataLoader` | Download & cache OHLCV data from asset inception to today for any supported ticker via yfinance |
 | `gldpred.features` | `FeatureEngineering` | Compute 30+ technical features (SMA, EMA, RSI, MACD, …); build multi-step sequences |
 | `gldpred.models` | `GRUForecaster`, `LSTMForecaster`, `TCNForecaster` | PyTorch `nn.Module` subclasses for quantile trajectory forecasting |
@@ -199,7 +203,7 @@ gld-price-prediction-dl/
 | `gldpred.inference` | `TrajectoryPredictor`, `TrajectoryForecast` | Price-path reconstruction from return forecasts + signal generation |
 | `gldpred.diagnostics` | `DiagnosticsAnalyzer` | Heuristic loss-curve analysis (verdict + suggestions) |
 | `gldpred.registry` | `ModelRegistry`, `ModelBundle`, `ModelAssignments` | Persist, load, list, delete, and rename trained model artifacts; `load_bundle()` for registry-backed inference; assign primary model per asset |
-| `gldpred.decision` | `DecisionEngine`, `Recommendation`, `RiskMetrics`, `RecommendationHistory`, `PortfolioComparator`, `ActionPlan`, `DayRecommendation`, `EntryWindow`, `ExitPoint`, `DecisionRationale`, `ScenarioAnalysis`, `ScenarioOutcome`, `build_action_plan`, `summarize_action_plan`, `analyze_scenarios` | Convert forecast trajectories into BUY / HOLD / AVOID with confidence, risk metrics, regime detection; portfolio comparison; time-based action plans with BUY / HOLD / SELL / AVOID per-day classification, entry-window detection, scenario analysis |
+| `gldpred.decision` | `DecisionEngine`, `Recommendation`, `RiskMetrics`, `RecommendationHistory`, `PortfolioComparator`, `ActionPlan`, `DayRecommendation`, `EntryWindow`, `ExitPoint`, `DecisionRationale`, `ScenarioAnalysis`, `ScenarioOutcome`, `build_action_plan`, `summarize_action_plan`, `analyze_scenarios` | Convert forecast trajectories into BUY / HOLD / AVOID with confidence, risk metrics, regime detection, **asset-class-aware risk modifiers**; portfolio comparison with **SPY benchmark**; time-based action plans with BUY / HOLD / SELL / AVOID per-day classification, entry-window detection, scenario analysis |
 | `gldpred.core.policy` | `DecisionPolicy`, `PolicyResult`, `ScoreFactor` | Transparent scoring wrapper around DecisionEngine — decomposes recommendation into labelled, bilingual factors with sentiments |
 | `gldpred.storage` | `TradeLogEntry`, `TradeLogStore` | JSONL-based trade log persistence — append, load, close trades, summary stats |
 | `gldpred.services` | `HealthService`, `ModelHealthReport`, `BacktestEngine`, `BacktestResult`, `BacktestSummary` | Model health monitoring (staleness, accuracy, recommendations); walk-forward backtesting engine |
@@ -296,7 +300,7 @@ pip install -r requirements.txt
 # Run the Streamlit app
 streamlit run app.py
 
-# Run tests (pytest — 247 tests across 18 files)
+# Run tests (pytest — 269 tests across 18 files)
 pytest
 pytest -v                       # verbose
 pytest tests/test_models.py     # single module
@@ -383,7 +387,7 @@ These are strictly off-limits unless explicitly requested:
 Run the test suite with:
 
 ```bash
-# pytest (247 tests across 18 files)
+# pytest (269 tests across 18 files)
 pytest
 pytest -v                       # verbose
 pytest tests/test_models.py     # single module
@@ -400,10 +404,10 @@ pytest tests/test_models.py     # single module
 | `tests/test_diagnostics.py` | Loss-curve verdicts (healthy, overfit, underfit, noisy) |
 | `tests/test_features.py` | Feature engineering, multi-step sequences |
 | `tests/test_registry.py` | ModelRegistry save, load, list, delete |
-| `tests/test_decision.py` | DecisionEngine recommendations & confidence |
-| `tests/test_catalog.py` | Asset catalog metadata, AssetInfo, ASSET_CATALOG |
+| `tests/test_decision.py` | DecisionEngine recommendations, confidence, asset-class modifier |
+| `tests/test_catalog.py` | Asset catalog metadata, AssetInfo, ASSET_CATALOG, risk tiers, benchmark, classification helpers |
 | `tests/test_assignments.py` | ModelAssignments persistence, assign/unassign |
-| `tests/test_portfolio.py` | RiskMetrics, regime detection, PortfolioComparator |
+| `tests/test_portfolio.py` | RiskMetrics, regime detection, PortfolioComparator, benchmark tagging |
 | `tests/test_trade_plan.py` | Action plan & scenario analysis: day classification, entry window, exit, scenarios, narrative, edge cases |
 | `tests/test_model_bundle.py` | ModelBundle predict, load_bundle roundtrip, weight preservation |
 | `tests/test_integration.py` | End-to-end pipeline smoke tests (all architectures) |

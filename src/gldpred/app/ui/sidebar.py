@@ -19,6 +19,7 @@ from gldpred.app.ui.components import (
     LR_OPTIONS,
 )
 from gldpred.config import SUPPORTED_ASSETS
+from gldpred.config.assets import ASSET_CATALOG, BENCHMARK_ASSET, RISK_LEVELS
 from gldpred.i18n import LANGUAGES, STRINGS
 from gldpred.registry import ModelAssignments
 
@@ -62,14 +63,68 @@ def render_sidebar(arch_options: List[str]) -> None:
             st.query_params["lang"] = new_code
         t = _t()
 
-        # Asset selection
-        prev_asset = ss.get(state.KEY_ASSET, "GLD")
-        asset = st.selectbox(
-            t["sidebar_asset"], SUPPORTED_ASSETS, key="_asset_select",
+        # Asset selection — grouped by risk tier
+        risk_filter = st.selectbox(
+            t["sidebar_risk_tier"],
+            [t["sidebar_all_tiers"]] + [
+                t[f"risk_level_{r}"] for r in RISK_LEVELS
+            ],
+            index=0,
+            key="_risk_tier_filter",
         )
+
+        # Build filtered asset list
+        if risk_filter == t["sidebar_all_tiers"]:
+            visible_assets = list(SUPPORTED_ASSETS)
+        else:
+            # Reverse-lookup the risk level from translated label
+            _risk_map = {t[f"risk_level_{r}"]: r for r in RISK_LEVELS}
+            selected_risk = _risk_map.get(risk_filter, "medium")
+            visible_assets = [
+                a for a in SUPPORTED_ASSETS
+                if ASSET_CATALOG.get(a, None) is not None
+                and ASSET_CATALOG[a].risk_level == selected_risk
+            ]
+
+        # Format display labels: "SPY — SPDR S&P 500 ETF [📊]"
+        def _label(ticker: str) -> str:
+            info = ASSET_CATALOG.get(ticker)
+            if info is None:
+                return ticker
+            badge = " 📊" if ticker == BENCHMARK_ASSET else ""
+            return f"{ticker} — {info.name}{badge}"
+
+        asset_labels = [_label(a) for a in visible_assets]
+        prev_asset = ss.get(state.KEY_ASSET, "SPY")
+
+        # Default index: previous selection or first
+        if prev_asset in visible_assets:
+            default_asset_idx = visible_assets.index(prev_asset)
+        else:
+            default_asset_idx = 0
+
+        chosen_label = st.selectbox(
+            t["sidebar_asset"], asset_labels,
+            index=default_asset_idx, key="_asset_select",
+        )
+        # Extract ticker from label
+        asset = chosen_label.split(" — ")[0].strip() if " — " in chosen_label else chosen_label
+
         if asset != prev_asset:
             state.clear_data_state()
         ss[state.KEY_ASSET] = asset
+
+        # Show asset metadata badge
+        _info = ASSET_CATALOG.get(asset)
+        if _info is not None:
+            risk_label = t.get(f"risk_level_{_info.risk_level}", _info.risk_level)
+            horizon_labels = ", ".join(
+                t.get(f"horizon_{h}", h) for h in _info.investment_horizon
+            )
+            role_label = t.get(f"role_{_info.role}", _info.role)
+            st.caption(
+                f"⚡ {risk_label} · 📅 {horizon_labels} · 🎯 {role_label}"
+            )
 
         # Data settings
         st.subheader(t["sidebar_data_settings"])

@@ -4,6 +4,10 @@ Given an investment amount and a set of assets (each with a trained model),
 this module runs forecasts for every asset, computes EUR/USD outcomes,
 and produces a ranked leaderboard with risk-adjusted metrics.
 
+When the benchmark asset (SPY) is available, it is always included in
+the comparison and its outcome is flagged so the UI can highlight the
+difference between each candidate and the market baseline.
+
 Usage::
 
     from gldpred.decision.portfolio import PortfolioComparator, AssetOutcome
@@ -22,6 +26,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from gldpred.config.assets import ASSET_CATALOG, BENCHMARK_ASSET
 from gldpred.decision.engine import DecisionEngine, Recommendation
 
 
@@ -45,6 +50,8 @@ class AssetOutcome:
     pnl_pct_p90: float               # % return optimistic
     recommendation: Recommendation = field(default_factory=lambda: Recommendation(action="HOLD", confidence=50.0))
     rank: int = 0
+    is_benchmark: bool = False       # True for the benchmark asset (SPY)
+    risk_level: str = "medium"       # from AssetInfo
 
 
 @dataclass
@@ -110,17 +117,25 @@ class PortfolioComparator:
                 max_volatility=max_vol,
             )
 
+            # Look up asset metadata for risk-aware scoring
+            asset_info = ASSET_CATALOG.get(ticker)
+
             reco = engine.recommend(
                 forecast.returns_quantiles,
                 df,
                 quantiles=tuple(forecast.quantiles),
                 diagnostics_verdict=diagnostics_verdicts.get(ticker),
+                asset_info=asset_info,
             )
 
             # Compute monetary outcomes
             outcome = self._compute_outcome(
                 ticker, forecast, investment, reco,
             )
+            # Tag benchmark and risk level
+            outcome.is_benchmark = (ticker == BENCHMARK_ASSET)
+            if asset_info is not None:
+                outcome.risk_level = asset_info.risk_level
             outcomes.append(outcome)
 
         # Rank by median PnL (descending)
@@ -195,7 +210,7 @@ class PortfolioComparator:
 
     @staticmethod
     def _build_summary(result: ComparisonResult) -> str:
-        """Build a plain-text leaderboard summary."""
+        """Build a plain-text leaderboard summary with benchmark context."""
         if not result.outcomes:
             return "No assets to compare."
         lines = [
@@ -203,12 +218,32 @@ class PortfolioComparator:
             f"Horizon: {result.horizon_days} days",
             "",
         ]
+
+        # Find benchmark outcome for relative commentary
+        bench = next((o for o in result.outcomes if o.is_benchmark), None)
+
         for o in result.outcomes:
+            marker = " [BENCHMARK]" if o.is_benchmark else ""
+            risk_tag = f" [{o.risk_level.upper()}]"
             lines.append(
-                f"#{o.rank} {o.ticker}: "
+                f"#{o.rank} {o.ticker}{risk_tag}{marker}: "
                 f"P50 PnL {o.pnl_pct_p50:+.2f}% "
                 f"(${o.pnl_p50:+,.2f}) — "
                 f"{o.recommendation.action} "
                 f"({o.recommendation.confidence:.0f}/100)"
             )
+
+        # Benchmark delta commentary
+        if bench is not None:
+            lines.append("")
+            lines.append(f"--- Benchmark: {bench.ticker} P50 = {bench.pnl_pct_p50:+.2f}% ---")
+            for o in result.outcomes:
+                if o.is_benchmark:
+                    continue
+                delta = o.pnl_pct_p50 - bench.pnl_pct_p50
+                direction = "above" if delta > 0 else "below"
+                lines.append(
+                    f"  {o.ticker} is {abs(delta):.2f}pp {direction} benchmark"
+                )
+
         return "\n".join(lines)

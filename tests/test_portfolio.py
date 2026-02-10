@@ -12,6 +12,7 @@ from gldpred.decision import (
     RecommendationHistory,
     RiskMetrics,
 )
+from gldpred.config.assets import BENCHMARK_ASSET
 from conftest import FORECAST_STEPS, QUANTILES
 
 
@@ -242,3 +243,56 @@ class TestPortfolioComparator:
         o = result.outcomes[0]
         assert isinstance(o.recommendation, Recommendation)
         assert o.recommendation.action in ("BUY", "HOLD", "AVOID")
+
+
+class TestBenchmarkComparison:
+    """Tests for benchmark tagging and risk-level propagation."""
+
+    def test_benchmark_tagged(self):
+        """SPY outcome should have is_benchmark=True."""
+        comparator = PortfolioComparator(horizon_days=5)
+        forecasts = {
+            "SPY": _FakeForecast(last_price=450),
+            "GLD": _FakeForecast(last_price=150),
+        }
+        dfs = {
+            "SPY": _make_df(close=450, sma50=445, sma200=430),
+            "GLD": _make_df(close=150),
+        }
+        result = comparator.compare(forecasts, dfs, investment=1000)
+        spy_out = next(o for o in result.outcomes if o.ticker == "SPY")
+        gld_out = next(o for o in result.outcomes if o.ticker == "GLD")
+        assert spy_out.is_benchmark is True
+        assert gld_out.is_benchmark is False
+
+    def test_risk_level_propagated(self):
+        """Outcomes get their risk_level from the catalog."""
+        comparator = PortfolioComparator(horizon_days=5)
+        forecasts = {
+            "SPY": _FakeForecast(last_price=450),
+            "BTC-USD": _FakeForecast(last_price=60000),
+        }
+        dfs = {
+            "SPY": _make_df(close=450, sma50=445, sma200=430),
+            "BTC-USD": _make_df(close=60000, sma50=59000, sma200=55000),
+        }
+        result = comparator.compare(forecasts, dfs, investment=1000)
+        spy_out = next(o for o in result.outcomes if o.ticker == "SPY")
+        btc_out = next(o for o in result.outcomes if o.ticker == "BTC-USD")
+        assert spy_out.risk_level == "low"
+        assert btc_out.risk_level == "high"
+
+    def test_summary_includes_benchmark_delta(self):
+        """Summary should contain benchmark reference when SPY is present."""
+        comparator = PortfolioComparator(horizon_days=5)
+        forecasts = {
+            "SPY": _FakeForecast(last_price=450),
+            "GLD": _FakeForecast(last_price=150),
+        }
+        dfs = {
+            "SPY": _make_df(close=450, sma50=445, sma200=430),
+            "GLD": _make_df(close=150),
+        }
+        result = comparator.compare(forecasts, dfs, investment=1000)
+        assert "BENCHMARK" in result.summary
+        assert "benchmark" in result.summary.lower()

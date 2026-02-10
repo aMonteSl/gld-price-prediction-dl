@@ -129,6 +129,11 @@ _FACTOR_META = {
         "label_es": "Salud del Modelo",
         "max": 10.0,
     },
+    "asset_class": {
+        "label_en": "Asset Risk Profile",
+        "label_es": "Perfil de Riesgo del Activo",
+        "max": 10.0,
+    },
 }
 
 
@@ -171,10 +176,12 @@ class DecisionPolicy:
         df: pd.DataFrame,
         quantiles: tuple[float, ...] = (0.1, 0.5, 0.9),
         diagnostics_verdict: Optional[str] = None,
+        asset_info: Optional[Any] = None,
     ) -> PolicyResult:
         """Run the engine and return a transparent ``PolicyResult``."""
         rec = self._engine.recommend(
             returns_quantiles, df, quantiles, diagnostics_verdict,
+            asset_info=asset_info,
         )
 
         # Unpack score_components from the Recommendation
