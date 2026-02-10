@@ -1,4 +1,4 @@
-"""Forecast tab rendering with caching and guided empty states."""
+"""Forecast tab rendering."""
 from __future__ import annotations
 
 import traceback
@@ -8,8 +8,6 @@ import pandas as pd
 import streamlit as st
 
 from gldpred.app import state
-from gldpred.app.components.empty_states import show_empty_no_data, show_empty_no_model
-from gldpred.app.components.forecast_cache import ForecastCache
 from gldpred.app.controllers.forecasting_controller import generate_forecast
 from gldpred.app.controllers.model_loader import auto_select_model, get_active_model
 from gldpred.app.glossary import info_term
@@ -23,7 +21,7 @@ def render(t: Dict[str, str], lang: str) -> None:
 
     df = state.get(state.KEY_RAW_DF)
     if df is None:
-        show_empty_no_data(t)
+        st.warning(t["forecast_warn_no_model"])
         return
 
     # Get model: active model > auto-select from registry
@@ -32,7 +30,7 @@ def render(t: Dict[str, str], lang: str) -> None:
     if model is None:
         model = auto_select_model(asset)
     if model is None:
-        show_empty_no_model(t)
+        st.warning(t["forecast_warn_no_model"])
         return
 
     # Validate asset compatibility

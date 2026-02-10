@@ -1,7 +1,7 @@
-"""Streamlit application -- 12-tab GUI for multi-asset price prediction.
+"""Streamlit application -- 8-tab GUI for multi-asset price prediction.
 
-Tabs: Dashboard . Data . Train . Models . Forecast . Recommendation .
-      Evaluation . Compare . Portfolio . Health . Backtest . Tutorial
+Tabs: Data . Train . Models . Forecast . Recommendation . Evaluation .
+      Compare . Tutorial
 
 Run with::
 
@@ -15,7 +15,6 @@ import streamlit as st
 import torch.nn as nn
 
 from gldpred.app import state
-from gldpred.app.ui.tabs_dashboard import render as render_dashboard_tab
 from gldpred.app.ui.tabs_train import render as render_train_tab
 from gldpred.app.ui.sidebar import render_sidebar
 from gldpred.app.ui.tabs_data import render as render_data_tab
@@ -24,9 +23,6 @@ from gldpred.app.ui.tabs_forecast import render as render_forecast_tab
 from gldpred.app.ui.tabs_recommendation import render as render_recommendation_tab
 from gldpred.app.ui.tabs_evaluation import render as render_evaluation_tab
 from gldpred.app.ui.tabs_compare import render as render_compare_tab
-from gldpred.app.ui.tabs_portfolio import render as render_portfolio_tab
-from gldpred.app.ui.tabs_health import render as render_health_tab
-from gldpred.app.ui.tabs_backtest import render as render_backtest_tab
 from gldpred.app.ui.tabs_tutorial import render as render_tutorial_tab
 from gldpred.config import AppConfig
 from gldpred.i18n import STRINGS
@@ -66,11 +62,9 @@ def main() -> None:
 
     render_sidebar(list(_ARCH_MAP.keys()))
 
-    # 12 tabs — Dashboard first (Decision-Primary flow)
-    (tab_dash, tab_data, tab_train, tab_models, tab_forecast,
-     tab_reco, tab_eval, tab_compare, tab_portfolio, tab_health,
-     tab_backtest, tab_tutorial) = st.tabs([
-        t["tab_dashboard"],
+    # 8 tabs
+    (tab_data, tab_train, tab_models, tab_forecast,
+     tab_reco, tab_eval, tab_compare, tab_tutorial) = st.tabs([
         t["tab_data"],
         t["tab_train"],
         t["tab_models"],
@@ -78,14 +72,9 @@ def main() -> None:
         t["tab_recommendation"],
         t["tab_evaluation"],
         t["tab_compare"],
-        t["tab_portfolio"],
-        t["tab_health"],
-        t["tab_backtest"],
         t["tab_tutorial"],
     ])
 
-    with tab_dash:
-        render_dashboard_tab(_t())
     with tab_data:
         render_data_tab(_t())
     with tab_train:
@@ -100,12 +89,6 @@ def main() -> None:
         render_evaluation_tab(_t(), _lang())
     with tab_compare:
         render_compare_tab(_t())
-    with tab_portfolio:
-        render_portfolio_tab(_t(), _lang())
-    with tab_health:
-        render_health_tab(_t(), _lang())
-    with tab_backtest:
-        render_backtest_tab(_t(), _lang())
     with tab_tutorial:
         render_tutorial_tab(_t())
 

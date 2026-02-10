@@ -1,11 +1,10 @@
-"""Compare tab rendering with scatter plot."""
+"""Compare tab rendering."""
 from __future__ import annotations
 
 import traceback
 from typing import Dict
 
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 from gldpred.app import state
@@ -160,9 +159,6 @@ def _render_comparison(t: Dict[str, str], result) -> None:
         f"({best.recommendation.confidence:.0f}/100)"
     )
 
-    # ── Scatter plot: Risk vs Return ─────────────────────────────
-    _render_scatter(t, result)
-
     st.subheader(t["compare_leaderboard"])
     rows = []
     for o in result.outcomes:
@@ -209,60 +205,3 @@ def _render_comparison(t: Dict[str, str], result) -> None:
             if o.recommendation.rationale:
                 for r in o.recommendation.rationale[:3]:
                     st.markdown(f"- {r}")
-
-
-def _render_scatter(t: Dict[str, str], result) -> None:
-    """Risk-vs-return scatter bubble chart."""
-    if len(result.outcomes) < 2:
-        return
-
-    _ACTION_COLOUR = {
-        "BUY": "#27ae60",
-        "HOLD": "#f39c12",
-        "AVOID": "#7f8c8d",
-    }
-
-    fig = go.Figure()
-    for o in result.outcomes:
-        risk_pct = o.recommendation.risk.stop_loss_pct  # negative %
-        return_pct = o.pnl_pct_p50
-        conf = o.recommendation.confidence
-        action = o.recommendation.action
-        colour = _ACTION_COLOUR.get(action, "#95a5a6")
-
-        fig.add_trace(go.Scatter(
-            x=[abs(risk_pct)],
-            y=[return_pct],
-            mode="markers+text",
-            marker=dict(
-                size=max(conf / 3, 10),
-                color=colour,
-                opacity=0.8,
-                line=dict(width=1, color="white"),
-            ),
-            text=[o.ticker],
-            textposition="top center",
-            name=o.ticker,
-            hovertemplate=(
-                f"<b>{o.ticker}</b><br>"
-                f"Return: {return_pct:+.2f}%<br>"
-                f"Risk: {risk_pct:+.2f}%<br>"
-                f"Confidence: {conf:.0f}%<br>"
-                f"Signal: {action}"
-                "<extra></extra>"
-            ),
-        ))
-
-    fig.update_layout(
-        title=t.get("compare_scatter_title", "Risk vs. Return"),
-        xaxis_title=t.get("compare_scatter_x", "Max Risk (%)"),
-        yaxis_title=t.get("compare_scatter_y", "Expected Return (%)"),
-        template="plotly_dark",
-        height=400,
-        showlegend=False,
-    )
-
-    # Add quadrant lines at 0
-    fig.add_hline(y=0, line_dash="dot", line_color="gray", opacity=0.5)
-
-    st.plotly_chart(fig, use_container_width=True)

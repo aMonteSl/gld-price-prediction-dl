@@ -31,10 +31,17 @@ given investment amount, producing a leaderboard of expected outcomes.
 
 A **Streamlit** GUI provides interactive data exploration (auto-loaded),
 training, **model management** (rename, delete, assign primary),
-forecasting, recommendation, evaluation, asset comparison, and a built-in
-tutorial — all fully internationalised in **English and Spanish**. An
-**educational glossary** with 25 bilingual terms provides context-sensitive
-help via popover components throughout the interface.
+forecasting, recommendation, evaluation, asset comparison, **portfolio
+tracking** (trade log with predicted vs actual outcomes), **model health
+monitoring** (staleness, accuracy, recalibration advice), **walk-forward
+backtesting**, and a built-in tutorial — all fully internationalised in
+**English and Spanish**. An **educational glossary** with 25 bilingual
+terms provides context-sensitive help via popover components throughout
+the interface.
+
+A **decision-first dashboard** serves as the landing page, showing all
+assets at a glance with recommendations, leaderboard, and entry/exit
+timing — answering *"Should I invest today?"* in under 30 seconds.
 
 ---
 
@@ -49,6 +56,7 @@ gld-price-prediction-dl/
 ├── README.md                     # User-facing README
 ├── USER_GUIDE.md                 # Comprehensive tutorial / user guide
 ├── AGENTS.md                     # ← You are here
+├── MEJORAS.md                    # UX strategy & 7-phase engineering plan
 │
 ├── src/gldpred/                  # Main Python package
 │   ├── __init__.py               # Package root (version, public API) — v3.0.0
@@ -59,7 +67,7 @@ gld-price-prediction-dl/
 │   │   └── assets.py             # AssetInfo, ASSET_CATALOG (centralised metadata)
 │   │
 │   ├── i18n/
-│   │   └── __init__.py           # STRINGS, LANGUAGES (EN / ES)
+│   │   └── __init__.py           # STRINGS, LANGUAGES (EN / ES) — 500+ keys
 │   │
 │   ├── data/
 │   │   ├── __init__.py
@@ -101,8 +109,21 @@ gld-price-prediction-dl/
 │   │   ├── scenario_analyzer.py  # ScenarioAnalysis, ScenarioOutcome, analyze_scenarios
 │   │   ├── action_planner.py     # ActionPlan, DayRecommendation, EntryWindow,
 │   │   │                         #   ExitPoint, DecisionRationale, build_action_plan
-│   │   ├── trade_plan.py         # Re-export bridge (backward compat)
 │   │   └── portfolio.py          # PortfolioComparator, AssetOutcome, ComparisonResult
+│   │
+│   ├── core/
+│   │   └── policy/
+│   │       ├── __init__.py       # Exports DecisionPolicy, PolicyResult, ScoreFactor
+│   │       └── scoring.py        # DecisionPolicy — transparent scoring wrapper
+│   │
+│   ├── storage/
+│   │   ├── __init__.py           # Exports TradeLogEntry, TradeLogStore
+│   │   └── trade_log.py          # JSONL-based trade log persistence
+│   │
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── health_service.py     # HealthService, ModelHealthReport, staleness_verdict
+│   │   └── backtest_engine.py    # BacktestEngine, BacktestResult, BacktestSummary
 │   │
 │   └── app/
 │       ├── __init__.py
@@ -111,7 +132,26 @@ gld-price-prediction-dl/
 │       ├── glossary.py           # Educational glossary + info_term() popover
 │       ├── compare_controller.py # Compare-tab orchestration
 │       ├── plots.py              # Fan chart & loss chart plot helpers
-│       └── streamlit_app.py      # 8-tab Streamlit GUI
+│       ├── streamlit_app.py      # 12-tab Streamlit GUI
+│       ├── components/
+│       │   ├── __init__.py       # ForecastCache, empty_states
+│       │   ├── forecast_cache.py # In-memory forecast cache with TTL + data-hash
+│       │   └── empty_states.py   # Guided empty-state UI components
+│       ├── controllers/
+│       │   └── dashboard_controller.py  # Dashboard analysis engine
+│       └── ui/
+│           ├── tabs_dashboard.py     # 📊 Dashboard (landing page)
+│           ├── tabs_data.py          # 📁 Data loading
+│           ├── tabs_train.py         # 🏋️ Training
+│           ├── tabs_models.py        # 🗂️ Model management
+│           ├── tabs_forecast.py      # 📈 Fan chart forecast
+│           ├── tabs_recommendation.py # 🎯 Recommendation + action plan
+│           ├── tabs_evaluation.py    # 📊 Evaluation metrics
+│           ├── tabs_compare.py       # ⚖️ Asset comparison + scatter
+│           ├── tabs_portfolio.py     # 💼 Portfolio / trade log
+│           ├── tabs_health.py        # 🩺 Model health monitoring
+│           ├── tabs_backtest.py      # 🔬 Walk-forward backtesting
+│           └── tabs_tutorial.py      # 📚 Tutorial
 │
 ├── scripts/
 │   └── example.py                # CLI example script
@@ -122,13 +162,20 @@ gld-price-prediction-dl/
 │   ├── test_trainer.py           # Training loop, predict, save/load
 │   ├── test_evaluator.py         # Trajectory & quantile metrics
 │   ├── test_diagnostics.py       # Loss-curve analysis
-│   ├── test_features.py          # Feature engineering & sequences
+│   ├── test_features.py         # Feature engineering & sequences
 │   ├── test_registry.py          # ModelRegistry persistence
 │   ├── test_decision.py          # DecisionEngine & Recommendation
 │   ├── test_catalog.py           # Asset catalog & metadata
 │   ├── test_assignments.py       # Model assignments persistence
 │   ├── test_portfolio.py         # Portfolio comparison & risk metrics
-│   └── test_trade_plan.py        # Action plan & scenario analysis (40 tests)
+│   ├── test_trade_plan.py        # Action plan & scenario analysis (40 tests)
+│   ├── test_model_bundle.py      # ModelBundle predict, load_bundle roundtrip
+│   ├── test_integration.py       # End-to-end pipeline smoke tests
+│   ├── test_forecast_cache.py    # ForecastCache TTL, invalidation, hash
+│   ├── test_decision_policy.py   # DecisionPolicy scoring factors
+│   ├── test_trade_log.py         # TradeLogStore JSONL persistence
+│   ├── test_health_service.py    # HealthService staleness, accuracy, recommendations
+│   └── test_backtest_engine.py   # BacktestEngine walk-forward, summary stats
 │
 └── data/model_registry/          # Saved model artifacts (git-ignored)
 ```
@@ -149,12 +196,17 @@ gld-price-prediction-dl/
 | `gldpred.diagnostics` | `DiagnosticsAnalyzer` | Heuristic loss-curve analysis (verdict + suggestions) |
 | `gldpred.registry` | `ModelRegistry`, `ModelBundle`, `ModelAssignments` | Persist, load, list, delete, and rename trained model artifacts; `load_bundle()` for registry-backed inference; assign primary model per asset |
 | `gldpred.decision` | `DecisionEngine`, `Recommendation`, `RiskMetrics`, `RecommendationHistory`, `PortfolioComparator`, `ActionPlan`, `DayRecommendation`, `EntryWindow`, `ExitPoint`, `DecisionRationale`, `ScenarioAnalysis`, `ScenarioOutcome`, `build_action_plan`, `summarize_action_plan`, `analyze_scenarios` | Convert forecast trajectories into BUY / HOLD / AVOID with confidence, risk metrics, regime detection; portfolio comparison; time-based action plans with BUY / HOLD / SELL / AVOID per-day classification, entry-window detection, scenario analysis |
-| `gldpred.i18n` | `STRINGS`, `LANGUAGES` | Dictionary-based i18n (English / Spanish) |
+| `gldpred.core.policy` | `DecisionPolicy`, `PolicyResult`, `ScoreFactor` | Transparent scoring wrapper around DecisionEngine — decomposes recommendation into labelled, bilingual factors with sentiments |
+| `gldpred.storage` | `TradeLogEntry`, `TradeLogStore` | JSONL-based trade log persistence — append, load, close trades, summary stats |
+| `gldpred.services` | `HealthService`, `ModelHealthReport`, `BacktestEngine`, `BacktestResult`, `BacktestSummary` | Model health monitoring (staleness, accuracy, recommendations); walk-forward backtesting engine |
+| `gldpred.i18n` | `STRINGS`, `LANGUAGES` | Dictionary-based i18n (English / Spanish) — 500+ keys |
 | `gldpred.app.state` | `init_state`, `get`, `put`, `clear_training_state`, `clear_data_state`, `KEY_*` | Centralised session-state keys, defaults, and helpers |
 | `gldpred.app.data_controller` | `LoadedData`, `fetch_asset_data`, `invalidate_cache` | Cached data loading via `@st.cache_data` (1-hour TTL) |
 | `gldpred.app.glossary` | `GlossaryEntry`, `GLOSSARY`, `info_term` | Educational glossary with 25 bilingual terms + popover component |
 | `gldpred.app.compare_controller` | `CompareRow`, `run_comparison`, `available_models_for_asset` | Compare-tab orchestration: per-row asset+model selection, comparison pipeline |
-| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 8 tabs |
+| `gldpred.app.components` | `ForecastCache`, `show_empty_no_data`, `show_empty_no_model`, `show_empty_no_forecast` | In-memory forecast cache + guided empty-state UI components |
+| `gldpred.app.controllers` | `DashboardAssetResult`, `DashboardResult`, `run_dashboard_analysis` | Dashboard analysis engine — iterates assets, loads models, runs forecasts |
+| `gldpred.app.streamlit_app` | *(script)* | Streamlit application with 12 tabs |
 | `gldpred.app.plots` | `create_loss_chart`, `create_fan_chart` | Plotly chart helpers (loss chart with best-epoch markers, fan chart) |
 
 ### Model classes (all in `gldpred.models`)
@@ -240,7 +292,7 @@ pip install -r requirements.txt
 # Run the Streamlit app
 streamlit run app.py
 
-# Run tests (pytest — 168 tests across 13 files)
+# Run tests (pytest — 247 tests across 18 files)
 pytest
 pytest -v                       # verbose
 pytest tests/test_models.py     # single module
@@ -327,7 +379,7 @@ These are strictly off-limits unless explicitly requested:
 Run the test suite with:
 
 ```bash
-# pytest (168 tests across 13 files)
+# pytest (247 tests across 18 files)
 pytest
 pytest -v                       # verbose
 pytest tests/test_models.py     # single module
@@ -351,6 +403,11 @@ pytest tests/test_models.py     # single module
 | `tests/test_trade_plan.py` | Action plan & scenario analysis: day classification, entry window, exit, scenarios, narrative, edge cases |
 | `tests/test_model_bundle.py` | ModelBundle predict, load_bundle roundtrip, weight preservation |
 | `tests/test_integration.py` | End-to-end pipeline smoke tests (all architectures) |
+| `tests/test_forecast_cache.py` | ForecastCache TTL, invalidation, hash |
+| `tests/test_decision_policy.py` | DecisionPolicy scoring factors |
+| `tests/test_trade_log.py` | TradeLogStore JSONL persistence |
+| `tests/test_health_service.py` | HealthService staleness, accuracy, recommendations |
+| `tests/test_backtest_engine.py` | BacktestEngine walk-forward, summary stats |
 
 When adding new functionality, add corresponding parametric tests.
 Tests should be self-contained and not require network access (mock yfinance

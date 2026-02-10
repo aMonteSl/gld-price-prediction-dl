@@ -10,10 +10,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from gldpred.app import state
-from gldpred.app.components.empty_states import (
-    show_empty_no_forecast,
-    show_empty_no_model,
-)
 from gldpred.app.controllers.model_loader import auto_select_model, get_active_model
 from gldpred.app.controllers.trade_plan_controller import generate_action_plan
 from gldpred.app.glossary import info_term
@@ -44,10 +40,10 @@ def render(t: Dict[str, str], lang: str) -> None:
     if model is None:
         model = auto_select_model(asset)
     if model is None:
-        show_empty_no_model(t)
+        st.warning(t["reco_warn_no_model"])
         return
     if forecast is None:
-        show_empty_no_forecast(t)
+        st.warning(t["ap_no_forecast"])
         return
 
     try:
