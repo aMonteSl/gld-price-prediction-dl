@@ -70,7 +70,7 @@ def render(t: Dict[str, str], lang: str = "en") -> None:
     with c2:
         investment = st.number_input(
             t.get("backtest_investment", "Investment ($)"),
-            min_value=100,
+            min_value=1,
             max_value=1_000_000,
             value=10_000,
             step=1000,

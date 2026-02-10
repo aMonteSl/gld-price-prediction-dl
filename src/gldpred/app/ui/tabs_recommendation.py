@@ -14,6 +14,7 @@ from gldpred.app.components.empty_states import (
     show_empty_no_forecast,
     show_empty_no_model,
 )
+from gldpred.app.components.walkthrough import render_walkthrough_banner
 from gldpred.app.controllers.model_loader import auto_select_model, get_active_model
 from gldpred.app.controllers.trade_plan_controller import generate_action_plan
 from gldpred.app.glossary import info_term
@@ -31,6 +32,7 @@ _ACTION_COLOURS = {
 
 def render(t: Dict[str, str], lang: str) -> None:
     """Render the Recommendation tab with full action-plan UI."""
+    render_walkthrough_banner(t, "tab_recommendation")
     st.header(t["reco_header"])
     st.markdown(t["reco_disclaimer"])
     st.info(t["ap_info"])

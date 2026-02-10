@@ -45,6 +45,7 @@ KEY_COMPARE_RESULT = "compare_result"
 KEY_LANGUAGE = "language"
 KEY_TUTORIAL_DONE = "tutorial_done"
 KEY_ONBOARDING_STEP = "onboarding_step"
+KEY_WALKTHROUGH_STEP = "walkthrough_step"  # 0 = off, 1-6 = active walkthrough
 
 
 # ── Defaults ─────────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ _DEFAULTS: Dict[str, Any] = {
     KEY_LANGUAGE: "es",
     KEY_TUTORIAL_DONE: False,
     KEY_ONBOARDING_STEP: 0,
+    KEY_WALKTHROUGH_STEP: 0,
 }
 
 

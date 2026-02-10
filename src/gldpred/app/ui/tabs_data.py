@@ -8,11 +8,13 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from gldpred.app import state
+from gldpred.app.components.walkthrough import render_walkthrough_banner
 from gldpred.app.data_controller import LoadedData, fetch_asset_data, invalidate_cache
 
 
 def render(t: Dict[str, str]) -> None:
     """Render the Data tab."""
+    render_walkthrough_banner(t, "tab_data")
     st.header(t["data_header"])
     st.info(t["data_info"])
 

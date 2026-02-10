@@ -8,6 +8,10 @@ Implementation uses ``st.container`` with prominent styling and
 Next / Back / Skip navigation. Each step explains a major area of
 the application in plain, non-technical Spanish with real money
 examples (€1 000).
+
+When the last step is completed, the user is offered a choice:
+- **Start guided walkthrough** — hands-on tab-by-tab usage example
+- **Explore on my own** — jump straight into the app
 """
 from __future__ import annotations
 
@@ -16,6 +20,7 @@ from typing import Dict
 import streamlit as st
 
 from gldpred.app import state
+from gldpred.app.components.walkthrough import start_walkthrough
 
 
 # ── Step definitions ─────────────────────────────────────────────────
@@ -50,8 +55,10 @@ def show_onboarding(t: Dict[str, str]) -> None:
     # Safety clamp
     if current < 0:
         current = 0
+
+    # ── Choice screen: after step 8, offer walkthrough vs free explore ──
     if current >= TOTAL_STEPS:
-        _finish_onboarding()
+        _render_choice_screen(t)
         return
 
     title_key, body_key = _STEPS[current]
@@ -92,10 +99,8 @@ def show_onboarding(t: Dict[str, str]) -> None:
             type="primary",
             use_container_width=True,
         ):
-            if is_last:
-                _finish_onboarding()
-            else:
-                state.put(state.KEY_ONBOARDING_STEP, current + 1)
+            # Advance to next step (or to the choice screen if last)
+            state.put(state.KEY_ONBOARDING_STEP, current + 1)
             st.rerun()
 
         # Skip
@@ -114,9 +119,49 @@ def restart_onboarding() -> None:
     """Reset onboarding state so it triggers again."""
     state.put(state.KEY_TUTORIAL_DONE, False)
     state.put(state.KEY_ONBOARDING_STEP, 0)
+    state.put(state.KEY_WALKTHROUGH_STEP, 0)
 
 
 def _finish_onboarding() -> None:
     """Mark onboarding as completed."""
     state.put(state.KEY_TUTORIAL_DONE, True)
     state.put(state.KEY_ONBOARDING_STEP, 0)
+
+
+def _render_choice_screen(t: Dict[str, str]) -> None:
+    """Show the post-onboarding choice: walkthrough or free explore."""
+    st.markdown("---")
+    with st.container():
+        st.markdown(f"## 🎓 {t.get('onb_choice_title', '¿Quieres un ejemplo práctico?')}")
+        st.markdown(t.get("onb_choice_body", ""))
+
+        cols = st.columns([1, 1, 1])
+
+        if cols[0].button(
+            t.get("onb_choice_walkthrough", "🚀 Sí, guíame paso a paso"),
+            key="onb_start_walkthrough",
+            type="primary",
+            use_container_width=True,
+        ):
+            _finish_onboarding()
+            start_walkthrough()
+            st.rerun()
+
+        if cols[1].button(
+            t.get("onb_choice_explore", "🗺️ Explorar por mi cuenta"),
+            key="onb_explore_alone",
+            use_container_width=True,
+        ):
+            _finish_onboarding()
+            st.rerun()
+
+        # Back to last step
+        if cols[2].button(
+            t.get("onb_back", "⬅️ Atrás"),
+            key="onb_choice_back",
+            use_container_width=True,
+        ):
+            state.put(state.KEY_ONBOARDING_STEP, TOTAL_STEPS - 1)
+            st.rerun()
+
+    st.markdown("---")

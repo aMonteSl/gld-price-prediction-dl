@@ -14,6 +14,7 @@ import streamlit as st
 
 from gldpred.app import state
 from gldpred.app.components.empty_states import show_empty_no_model
+from gldpred.app.components.walkthrough import render_walkthrough_banner
 from gldpred.app.controllers.dashboard_controller import (
     DashboardAssetResult,
     DashboardResult,
@@ -40,6 +41,7 @@ _SIGNAL_EMOJI = {
 
 def render(t: Dict[str, str]) -> None:
     """Render the Dashboard tab."""
+    render_walkthrough_banner(t, "tab_dashboard")
     st.header(t["dash_header"])
     st.caption(t["dash_subtitle"])
 
@@ -47,7 +49,7 @@ def render(t: Dict[str, str]) -> None:
     c1, c2 = st.columns(2)
     investment = c1.number_input(
         t["dash_investment_label"],
-        min_value=100.0,
+        min_value=0.01,
         max_value=1_000_000.0,
         value=10_000.0,
         step=500.0,

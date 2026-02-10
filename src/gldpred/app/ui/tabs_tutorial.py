@@ -6,6 +6,7 @@ from typing import Dict
 import streamlit as st
 
 from gldpred.app.components.onboarding import restart_onboarding
+from gldpred.app.components.walkthrough import start_walkthrough
 
 
 def render(t: Dict[str, str]) -> None:
@@ -13,15 +14,27 @@ def render(t: Dict[str, str]) -> None:
     st.header(t["tut_header"])
     st.markdown(t["tut_disclaimer"])
 
-    # Restart guided onboarding button
-    if st.button(
-        t.get("onb_restart", "📘 Restart Guided Tutorial"),
-        key="tut_restart_onboarding",
-        type="primary",
-    ):
-        restart_onboarding()
-        st.success(t.get("onb_restart_done", "Tutorial restarted!"))
-        st.rerun()
+    # Restart buttons
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button(
+            t.get("onb_restart", "📘 Restart Guided Tutorial"),
+            key="tut_restart_onboarding",
+            type="primary",
+            use_container_width=True,
+        ):
+            restart_onboarding()
+            st.rerun()
+
+    with col2:
+        if st.button(
+            t.get("wt_restart", "🚀 Restart Hands-On Walkthrough"),
+            key="tut_restart_walkthrough",
+            use_container_width=True,
+        ):
+            start_walkthrough()
+            st.rerun()
 
     st.divider()
 

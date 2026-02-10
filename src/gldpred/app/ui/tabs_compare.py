@@ -108,7 +108,7 @@ def render(t: Dict[str, str]) -> None:
     cc1, cc2 = st.columns(2)
     investment = cc1.number_input(
         t["compare_investment"],
-        min_value=10.0, max_value=1_000_000.0,
+        min_value=0.01, max_value=1_000_000.0,
         value=1000.0, step=10.0, key="compare_investment",
     )
     horizon = cc2.slider(

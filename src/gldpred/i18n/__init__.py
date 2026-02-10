@@ -809,6 +809,7 @@ The registry is stored in `data/model_registry/` (git-ignored).
         "onb_finish": "✅ Get started",
         "onb_restart": "📘 Restart Guided Tutorial",
         "onb_restart_done": "Tutorial restarted! Refresh to see it.",
+        "wt_restart": "🚀 Restart Hands-On Walkthrough",
 
         "onb_step1_title": "Welcome to the App",
         "onb_step1_body": """
@@ -956,6 +957,138 @@ committing real money.
 ---
 
 🎉 **You're ready to begin!** Head to the Dashboard to see your first analysis.
+""",
+
+        # -- Post-onboarding choice screen --------------------------------
+        "onb_choice_title": "Would you like a hands-on example?",
+        "onb_choice_body": """
+You've finished the introduction! Now you can choose:
+
+🚀 **Guided walkthrough** — We'll walk you through the app step by step,
+starting with loading data, viewing a forecast, and reading your first
+recommendation. Perfect if you want to see the app in action.
+
+🗺️ **Explore on your own** — Jump straight into the app and discover
+things at your own pace. You can always restart the tutorial later from
+the Tutorial tab.
+""",
+        "onb_choice_walkthrough": "🚀 Yes, guide me step by step",
+        "onb_choice_explore": "🗺️ Explore on my own",
+
+        # -- Guided walkthrough (hands-on) --------------------------------
+        "wt_progress": "Hands-on tutorial — step {step} of {total}",
+        "wt_done_next": "✅ Done — Next step",
+        "wt_finish": "🏁 Finish tutorial",
+        "wt_skip": "⏭️ Skip tutorial",
+        "wt_go_to_tab": "👉 The tutorial is waiting for you on the **{tab}** tab",
+        "wt_complete": "🎉 Tutorial completed!",
+        "wt_complete_body": """
+Congratulations! You've completed the guided walkthrough.
+
+You now know how to:
+- ✅ Load market data for any asset
+- ✅ Train or load a prediction model
+- ✅ Read fan-chart forecasts with uncertainty bands
+- ✅ Interpret recommendations and action plans
+- ✅ Use the Dashboard for a quick investment overview
+
+Explore the remaining tabs (**Compare**, **Portfolio**, **Health**,
+**Backtest**, **Data Hub**) at your own pace. Happy investing! 📈
+""",
+
+        "wt_step1_title": "Step 1: Load Market Data",
+        "wt_step1_body": """
+📁 You're on the **Data** tab.
+
+This is where the app downloads historical prices for a financial asset.
+
+**What to do:**
+1. Look at the **sidebar on the left** — an asset is already selected (GLD by default)
+2. The data loads automatically! You should see a price chart and a table of records
+3. Notice the date range, number of records, and latest price
+
+💡 **Tip:** You can change the asset in the sidebar (GLD, SLV, BTC-USD, PALL)
+and the data refreshes automatically.
+
+When you've seen the data, click **"Done — Next step"** below.
+""",
+
+        "wt_step2_title": "Step 2: Get a Prediction Model",
+        "wt_step2_body": """
+🏋️ You're on the **Train** tab.
+
+To generate forecasts, you need a trained neural network model.
+
+**Two options:**
+
+🔵 **Option A (Quick):** If there are already saved models, go to the
+sidebar and click **"Load model from registry"** — pick one and you're set!
+
+🟢 **Option B (Train new):** Configure the parameters here and click
+**"Train"**. Use the "Auto-configure" button in the sidebar for
+recommended settings. Training takes 1-3 minutes.
+
+💡 **Tip:** TCN (Temporal Convolutional Network) is the default
+architecture — it's fast and accurate.
+
+Once you have a model loaded or trained, click **"Done — Next step"**.
+""",
+
+        "wt_step3_title": "Step 3: View the Forecast",
+        "wt_step3_body": """
+📈 You're on the **Forecast** tab.
+
+This shows the **fan chart** — a visual representation of the model's
+price prediction over the next 20 trading days.
+
+**What to look for:**
+- 🟦 **Blue shaded area** — the uncertainty band (P10 to P90)
+- 📏 **Middle line (P50)** — the median prediction (most likely path)
+- 📊 **Lower band (P10)** — worst case scenario (10th percentile)
+- 📈 **Upper band (P90)** — best case scenario (90th percentile)
+
+💡 **Tip:** The wider the band, the more uncertain the model is.
+A narrow band means higher confidence.
+
+If you see the chart, click **"Done — Next step"**.
+""",
+
+        "wt_step4_title": "Step 4: Read the Recommendation",
+        "wt_step4_body": """
+🎯 You're on the **Recommendation** tab.
+
+This is where the app answers the big question: *"Should I invest?"*
+
+**What to do:**
+1. Click **"Generate Recommendation"** (or the equivalent button)
+2. Read the signal: 🟢 **BUY** / 🟡 **HOLD** / ⚫ **AVOID**
+3. Check the **confidence level** (higher = more conviction)
+4. Explore the **action plan** — it tells you which days to buy/hold/sell
+5. Review the **three scenarios** with money impact (P10/P50/P90)
+
+💡 **Tip:** The recommendation considers trend, volatility, downside risk,
+and current timing. It's not just one signal — it's a full analysis.
+
+When you've explored it, click **"Done — Next step"**.
+""",
+
+        "wt_step5_title": "Step 5: The Decision Dashboard",
+        "wt_step5_body": """
+📊 You're on the **Dashboard** tab.
+
+This is the main landing page — designed to answer
+*"Where should I invest today?"* in under 30 seconds.
+
+**What to do:**
+1. Set your **investment amount** and **horizon** at the top
+2. Click **"Run Analysis"**  to analyse all assets
+3. See the **leaderboard** — assets ranked by expected return
+4. Check each asset's signal, confidence, and risk metrics
+
+💡 **Tip:** The Dashboard requires at least one model assigned
+per asset. You can assign models in the **Models** tab.
+
+This is the last step! Click **"Finish tutorial"** when ready.
 """,
     },
 
@@ -1752,6 +1885,7 @@ directa. El registro se almacena en `data/model_registry/`.
         "onb_finish": "✅ Empezar a usar",
         "onb_restart": "📘 Reiniciar Tutorial Guiado",
         "onb_restart_done": "Tutorial reiniciado. Se mostrará al recargar la página.",
+        "wt_restart": "🚀 Reiniciar Tutorial Práctico",
 
         "onb_step1_title": "Bienvenido a la Aplicación",
         "onb_step1_body": """
@@ -1902,6 +2036,138 @@ antes de comprometer dinero real.
 ---
 
 🎉 **¡Estás listo para empezar!** Ve al Panel para ver tu primer análisis.
+""",
+
+        # -- Pantalla de elección post-onboarding -------------------------
+        "onb_choice_title": "¿Quieres un ejemplo práctico?",
+        "onb_choice_body": """
+¡Has terminado la introducción! Ahora puedes elegir:
+
+🚀 **Tutorial guiado** — Te guiaremos por la app paso a paso:
+cargar datos, ver un pronóstico y leer tu primera recomendación.
+Perfecto si quieres ver la app en acción.
+
+🗺️ **Explorar por tu cuenta** — Salta directamente a la app y
+descubre las cosas a tu ritmo. Siempre puedes reiniciar el tutorial
+desde la pestaña Tutorial.
+""",
+        "onb_choice_walkthrough": "🚀 Sí, guíame paso a paso",
+        "onb_choice_explore": "🗺️ Explorar por mi cuenta",
+
+        # -- Tutorial guiado práctico -------------------------------------
+        "wt_progress": "Tutorial práctico — paso {step} de {total}",
+        "wt_done_next": "✅ Listo — Siguiente paso",
+        "wt_finish": "🏁 Terminar tutorial",
+        "wt_skip": "⏭️ Saltar tutorial",
+        "wt_go_to_tab": "👉 El tutorial te espera en la pestaña **{tab}**",
+        "wt_complete": "🎉 ¡Tutorial completado!",
+        "wt_complete_body": """
+¡Enhorabuena! Has completado el tutorial guiado.
+
+Ahora sabes cómo:
+- ✅ Cargar datos de mercado de cualquier activo
+- ✅ Entrenar o cargar un modelo de predicción
+- ✅ Leer pronósticos fan-chart con bandas de incertidumbre
+- ✅ Interpretar recomendaciones y planes de acción
+- ✅ Usar el Panel para una visión rápida de inversión
+
+Explora las pestañas restantes (**Comparar**, **Portafolio**, **Salud**,
+**Backtest**, **Centro de Datos**) a tu ritmo. ¡Feliz inversión! 📈
+""",
+
+        "wt_step1_title": "Paso 1: Cargar Datos de Mercado",
+        "wt_step1_body": """
+📁 Estás en la pestaña **Datos**.
+
+Aquí es donde la app descarga los precios históricos de un activo financiero.
+
+**Qué hacer:**
+1. Mira la **barra lateral izquierda** — ya hay un activo seleccionado (GLD por defecto)
+2. ¡Los datos se cargan automáticamente! Deberías ver un gráfico de precios y una tabla de registros
+3. Observa el rango de fechas, número de registros y último precio
+
+💡 **Consejo:** Puedes cambiar el activo en la barra lateral (GLD, SLV, BTC-USD, PALL)
+y los datos se actualizan automáticamente.
+
+Cuando hayas visto los datos, haz clic en **"Listo — Siguiente paso"** abajo.
+""",
+
+        "wt_step2_title": "Paso 2: Obtener un Modelo de Predicción",
+        "wt_step2_body": """
+🏋️ Estás en la pestaña **Entrenar**.
+
+Para generar pronósticos, necesitas un modelo de red neuronal entrenado.
+
+**Dos opciones:**
+
+🔵 **Opción A (Rápida):** Si ya hay modelos guardados, ve a la barra
+lateral y haz clic en **"Cargar modelo del registro"** — ¡elige uno y listo!
+
+🟢 **Opción B (Entrenar nuevo):** Configura los parámetros aquí y haz clic
+en **"Entrenar"**. Usa el botón "Auto-configurar" en la barra lateral para
+obtener la configuración recomendada. El entrenamiento toma 1-3 minutos.
+
+💡 **Consejo:** TCN (Red Convolucional Temporal) es la arquitectura por
+defecto — es rápida y precisa.
+
+Cuando tengas un modelo cargado o entrenado, haz clic en **"Listo — Siguiente paso"**.
+""",
+
+        "wt_step3_title": "Paso 3: Ver el Pronóstico",
+        "wt_step3_body": """
+📈 Estás en la pestaña **Pronóstico**.
+
+Aquí se muestra el **fan chart** — una representación visual de la
+predicción de precios del modelo para los próximos 20 días de trading.
+
+**Qué buscar:**
+- 🟦 **Área sombreada azul** — la banda de incertidumbre (P10 a P90)
+- 📏 **Línea central (P50)** — la predicción mediana (camino más probable)
+- 📊 **Banda inferior (P10)** — peor escenario (percentil 10)
+- 📈 **Banda superior (P90)** — mejor escenario (percentil 90)
+
+💡 **Consejo:** Cuanto más ancha sea la banda, más incierto está el modelo.
+Una banda estrecha significa mayor confianza.
+
+Si ves el gráfico, haz clic en **"Listo — Siguiente paso"**.
+""",
+
+        "wt_step4_title": "Paso 4: Leer la Recomendación",
+        "wt_step4_body": """
+🎯 Estás en la pestaña **Recomendación**.
+
+Aquí es donde la app responde la gran pregunta: *"¿Debería invertir?"*
+
+**Qué hacer:**
+1. Haz clic en **"Generar Recomendación"** (o el botón equivalente)
+2. Lee la señal: 🟢 **COMPRAR** / 🟡 **MANTENER** / ⚫ **EVITAR**
+3. Revisa el **nivel de confianza** (mayor = más convicción)
+4. Explora el **plan de acción** — te dice qué días comprar/mantener/vender
+5. Revisa los **tres escenarios** con impacto en dinero (P10/P50/P90)
+
+💡 **Consejo:** La recomendación considera tendencia, volatilidad, riesgo bajista
+y timing actual. No es solo una señal — es un análisis completo.
+
+Cuando lo hayas explorado, haz clic en **"Listo — Siguiente paso"**.
+""",
+
+        "wt_step5_title": "Paso 5: El Panel de Decisiones",
+        "wt_step5_body": """
+📊 Estás en la pestaña **Panel**.
+
+Esta es la página principal — diseñada para responder
+*"¿Dónde debería invertir hoy?"* en menos de 30 segundos.
+
+**Qué hacer:**
+1. Establece tu **monto de inversión** y **horizonte** arriba
+2. Haz clic en **"Ejecutar Análisis"** para analizar todos los activos
+3. Ve el **leaderboard** — activos ordenados por retorno esperado
+4. Revisa la señal, confianza y métricas de riesgo de cada activo
+
+💡 **Consejo:** El Panel requiere al menos un modelo asignado por activo.
+Puedes asignar modelos en la pestaña **Modelos**.
+
+¡Este es el último paso! Haz clic en **"Terminar tutorial"** cuando estés listo.
 """,
     },
 }

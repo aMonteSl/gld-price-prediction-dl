@@ -36,6 +36,7 @@ from gldpred.app.components.onboarding import (
     should_show_onboarding,
     show_onboarding,
 )
+from gldpred.app.components.walkthrough import render_walkthrough_complete_banner
 from gldpred.config import AppConfig
 from gldpred.i18n import STRINGS
 from gldpred.i18n import DEFAULT_LANGUAGE as _DEFAULT_LANG
@@ -82,6 +83,9 @@ def main() -> None:
     if should_show_onboarding():
         show_onboarding(t)
         return  # Don't render tabs while onboarding is active
+
+    # Walkthrough completion banner (shows once, then auto-clears)
+    render_walkthrough_complete_banner(t)
 
     render_sidebar(list(_ARCH_MAP.keys()))
 

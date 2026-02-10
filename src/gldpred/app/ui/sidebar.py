@@ -200,7 +200,7 @@ def render_sidebar(arch_options: List[str]) -> None:
         )
         st.number_input(
             t["sidebar_tp_investment"],
-            min_value=100.0, max_value=1_000_000.0, value=10_000.0,
+            min_value=0.01, max_value=1_000_000.0, value=10_000.0,
             step=500.0,
             key="tp_investment",
         )

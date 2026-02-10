@@ -10,6 +10,7 @@ import streamlit as st
 from gldpred.app import state
 from gldpred.app.components.empty_states import show_empty_no_data, show_empty_no_model
 from gldpred.app.components.forecast_cache import ForecastCache
+from gldpred.app.components.walkthrough import render_walkthrough_banner
 from gldpred.app.controllers.forecasting_controller import generate_forecast
 from gldpred.app.controllers.model_loader import auto_select_model, get_active_model
 from gldpred.app.glossary import info_term
@@ -18,6 +19,7 @@ from gldpred.app.plots import create_fan_chart
 
 def render(t: Dict[str, str], lang: str) -> None:
     """Render the Forecast tab."""
+    render_walkthrough_banner(t, "tab_forecast")
     st.header(t["forecast_header"])
     st.info(t["forecast_info"])
 

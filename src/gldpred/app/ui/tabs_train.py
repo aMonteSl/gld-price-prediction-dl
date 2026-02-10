@@ -8,6 +8,7 @@ import streamlit as st
 import torch.nn as nn
 
 from gldpred.app import state
+from gldpred.app.components.walkthrough import render_walkthrough_banner
 from gldpred.app.controllers.training_controller import run_training
 from gldpred.app.ui.components import show_diagnostics
 from gldpred.registry import ModelRegistry
@@ -19,6 +20,7 @@ def render(
     arch_map: Dict[str, Type[nn.Module]],
 ) -> None:
     """Render the Train tab."""
+    render_walkthrough_banner(t, "tab_train")
     st.header(t["train_header"])
     st.info(t["train_info"])
 
